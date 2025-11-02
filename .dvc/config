@@ -1,0 +1,6 @@
+[core]
+    remote = s3remote
+['remote "s3remote"']
+    url = s3://itesm-mna/202502-equipo8/dvc
+    profile = equipo8
+    region = us-east-2
