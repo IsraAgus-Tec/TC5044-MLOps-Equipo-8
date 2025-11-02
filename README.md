@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # TC5044.10-Equipo-8
 Energy Efficiency Analysis - Machine Learning Pipeline
 
@@ -58,3 +59,7 @@ src/
 ## Target Variables
 - `heating_load`: Building heating energy requirements
 - `cooling_load`: Building cooling energy requirements
+=======
+# TC5044-MLOps-Equipo-8
+TC5044 MLOps-Equipo-8
+>>>>>>> origin/main
