@@ -266,4 +266,3 @@ if __name__ == "__main__":
     parser.add_argument("--test_size", type=float, default=0.2)
     args = parser.parse_args()
     main(target_choice=args.target, test_size=args.test_size)
-$
