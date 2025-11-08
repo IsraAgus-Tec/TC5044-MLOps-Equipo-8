@@ -2,7 +2,6 @@
 Entrenamiento y validación de modelos – Equipo 8.
 Incluye pipelines para Linear Regression, Random Forest y Gradient Boosting.
 """
-
 from __future__ import annotations
 
 import mlflow
