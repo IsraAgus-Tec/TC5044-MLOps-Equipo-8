@@ -45,7 +45,7 @@ SEED = 42
 TRACKING_URI = "file:./mlruns"
 EXPERIMENT_NAME = "Energy Efficiency – Ricardo Aguilar"
 
-DATA_PATH = Path("data/processed/energy_efficiency_modified.csv")
+DATA_PATH = Path("data/energy_efficiency_modified.csv")
 OUT_DIR = Path(__file__).resolve().parent
 OUT_CSV = OUT_DIR / "results_metrics.csv"
 OUT_HTML = OUT_DIR / "index.html"
