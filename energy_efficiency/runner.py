@@ -30,6 +30,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.model_selection import train_test_split, KFold, cross_val_score
+from sklearn.impute import SimpleImputer
 from sklearn.metrics import (
     r2_score,
     mean_absolute_error,
@@ -84,9 +85,13 @@ def metric_bundle(y_true, y_pred):
 
 
 def build_preprocessor(feature_cols):
-    """Crea un transformador de características numéricas con estandarización."""
+    """Imputa NaN y estandariza solo columnas numéricas."""
+    numeric_pipe = Pipeline(steps=[
+        ("imputer", SimpleImputer(strategy="median")),
+        ("scaler", StandardScaler())
+    ])
     return ColumnTransformer(
-        transformers=[("num", StandardScaler(), feature_cols)],
+        transformers=[("num", numeric_pipe, feature_cols)],
         remainder="drop",
         verbose_feature_names_out=False,
     )
@@ -163,6 +168,19 @@ def main(target_choice="both", test_size=0.2):
 
     df = pd.read_csv(DATA_PATH)
     targets = detect_targets(df)
+    # Mantén solo variables numéricas (evita errores por columnas mixtas)
+    y = df[[c for c in df.columns if c in targets]].copy()
+    X = df[[c for c in df.columns if c not in targets]].copy()
+
+    # 1️⃣ Solo columnas numéricas
+    feature_cols = X.select_dtypes(include=[np.number]).columns
+    X = X[feature_cols]
+
+    # 2️⃣ Si Y tiene NaN, los descartamos
+    mask = ~y.isna().any(axis=1)
+    X = X.loc[mask].reset_index(drop=True)
+    y = y.loc[mask].reset_index(drop=True)
+
 
     if target_choice == "heating":
         y_cols = [targets[0]]
