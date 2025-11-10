@@ -1,4 +1,3 @@
-
 """Runner script for Energy Efficiency project."""
 from __future__ import annotations
 
