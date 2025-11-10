@@ -35,49 +35,46 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 
-
 # -------------------------
 # Configuración por defecto
 # -------------------------
-DEFAULT_DATA = "src/data/energy_efficiency_modified.csv"  # cámbialo si tu CSV está en otro lugar
+DEFAULT_DATA = "src/data/energy_efficiency_modified.csv"
 EXPERIMENT_NAME = "Energy Efficiency – Ricardo Aguilar"
 RANDOM_STATE = 42
 N_SPLITS = 5
 TEST_SIZE = 0.2
 
-# MLflow: usa SQLite para evitar el FutureWarning del filesystem backend
+# MLflow: usa SQLite
 mlflow.set_tracking_uri("sqlite:///mlflow.db")
 mlflow.set_experiment(EXPERIMENT_NAME)
-
 
 def load_dataset(path: str | Path) -> pd.DataFrame:
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"No se encontró el dataset en: {path.resolve()}")
     df = pd.read_csv(path)
-    # Normaliza infinities -> NaN (para que el Imputer los procese)
     df = df.replace([np.inf, -np.inf], np.nan)
     return df
 
-
 def split_xy(df: pd.DataFrame, target_col: str):
     if target_col not in df.columns:
-        # soporta nombres comunes del dataset ENB2012
-        mapping = {"y1": ["Y1", "y1", "Heating Load", "Heating_Load"],
-                   "y2": ["Y2", "y2", "Cooling Load", "Cooling_Load"]}
-        # intenta mapear si pidieron y1/y2
+        mapping = {
+            "y1": ["Y1", "y1", "Heating Load", "Heating_Load"],
+            "y2": ["Y2", "y2", "Cooling Load", "Cooling_Load"],
+        }
         for k, aliases in mapping.items():
             if target_col.lower() == k and any(a in df.columns for a in aliases):
                 target_col = next(a for a in aliases if a in df.columns)
                 break
     if target_col not in df.columns:
-        raise ValueError(f"No existe la columna objetivo '{target_col}' en el dataset.\n"
-                         f"Columnas disponibles: {list(df.columns)}")
+        raise ValueError(
+            f"No existe la columna objetivo '{target_col}' en el dataset.\n"
+            f"Columnas disponibles: {list(df.columns)}"
+        )
 
     y = df[target_col].copy()
     X = df.drop(columns=[target_col]).copy()
 
-    # Quita filas donde y es NaN (no se puede entrenar sin etiqueta)
     mask_y = y.notna()
     if mask_y.sum() < len(y):
         print(f"[INFO] Filas eliminadas por NaN en y='{target_col}': {len(y) - mask_y.sum()}")
@@ -85,23 +82,17 @@ def split_xy(df: pd.DataFrame, target_col: str):
     y = y.loc[mask_y].reset_index(drop=True)
     return X, y
 
-
 def build_preprocessor(feature_names):
-    # Todas las columnas se tratan como numéricas para este dataset
     numeric_features = list(feature_names)
     numeric_transformer = Pipeline(steps=[
         ("imputer", SimpleImputer(strategy="median")),
         ("scaler", StandardScaler()),
     ])
     preprocessor = ColumnTransformer(
-        transformers=[
-            ("num", numeric_transformer, numeric_features),
-        ],
+        transformers=[("num", numeric_transformer, numeric_features)],
         remainder="drop",
-        n_jobs=None
     )
     return preprocessor
-
 
 def make_models():
     return {
@@ -114,26 +105,20 @@ def make_models():
         ),
     }
 
-
 def evaluate_and_log(model_name, pipeline, X_train, X_test, y_train, y_test, target_name):
     with mlflow.start_run(run_name=f"{model_name} | target={target_name}"):
-        # Entrena
         pipeline.fit(X_train, y_train)
 
-        # Predicción holdout
         y_pred = pipeline.predict(X_test)
         r2 = r2_score(y_test, y_pred)
         mae = mean_absolute_error(y_test, y_pred)
         rmse = mean_squared_error(y_test, y_pred, squared=False)
 
-        # CV 5-fold sobre el train
         kf = KFold(n_splits=N_SPLITS, shuffle=True, random_state=RANDOM_STATE)
-        # Neg MAE y Neg RMSE (convertimos a positivos)
         cv_r2 = cross_val_score(pipeline, X_train, y_train, scoring="r2", cv=kf)
         cv_mae = -cross_val_score(pipeline, X_train, y_train, scoring="neg_mean_absolute_error", cv=kf)
         cv_rmse = (-cross_val_score(pipeline, X_train, y_train, scoring="neg_root_mean_squared_error", cv=kf))
 
-        # Log métricas
         mlflow.log_metric("holdout_r2", r2)
         mlflow.log_metric("holdout_mae", mae)
         mlflow.log_metric("holdout_rmse", rmse)
@@ -144,17 +129,16 @@ def evaluate_and_log(model_name, pipeline, X_train, X_test, y_train, y_test, tar
         mlflow.log_metric("cv_rmse_mean", float(np.mean(cv_rmse)))
         mlflow.log_metric("cv_rmse_std", float(np.std(cv_rmse)))
 
-        # Log params básicos del modelo
         try:
-            mlflow.log_params({k: v for k, v in pipeline.named_steps["model"].get_params().items()
-                               if isinstance(v, (int, float, str, bool))})
+            mlflow.log_params({
+                k: v for k, v in pipeline.named_steps["model"].get_params().items()
+                if isinstance(v, (int, float, str, bool))
+            })
         except Exception:
             pass
 
-        # Guarda el modelo
         mlflow.sklearn.log_model(pipeline, artifact_path="model")
 
-        # Devuelve dict con resultados
         return {
             "target": target_name,
             "model": model_name,
@@ -166,16 +150,16 @@ def evaluate_and_log(model_name, pipeline, X_train, X_test, y_train, y_test, tar
             "cv_rmse_mean": float(np.mean(cv_rmse)),
         }
 
-
 def run_for_target(df: pd.DataFrame, target_code: str, test_size: float) -> pd.DataFrame:
-    # Map ea. "y1"/"y2" a nombre real de columna si aplica
     target_map = {"y1": "Y1", "y2": "Y2"}
     target_name = target_map.get(target_code.lower(), target_code)
 
     X, y = split_xy(df, target_name)
 
-    # Recuento NaN inicial en X
-    nan_count_before = int(np.isnan(X.to_numpy(dtype=float, copy=False)).sum()) if len(X) else 0
+    try:
+        nan_count_before = int(np.isnan(X.to_numpy(dtype=float, copy=False)).sum()) if len(X) else 0
+    except Exception:
+        nan_count_before = 0
     print(f"[INFO] NaN en X antes del preprocesamiento (target={target_name}): {nan_count_before}")
 
     X_train, X_test, y_train, y_test = train_test_split(
@@ -183,4 +167,54 @@ def run_for_target(df: pd.DataFrame, target_code: str, test_size: float) -> pd.D
     )
 
     pre = build_preprocessor(X.columns)
-    models = make_m_
+    models = make_models()
+
+    results = []
+    for name, est in models.items():
+        pipe = Pipeline(steps=[("preprocess", pre), ("model", est)])
+        res = evaluate_and_log(name, pipe, X_train, X_test, y_train, y_test, target_name)
+        results.append(res)
+
+    return pd.DataFrame(results)
+
+def save_results(df_results: pd.DataFrame, out_dir: Path):
+    out_dir.mkdir(parents=True, exist_ok=True)
+    csv_path = out_dir / "results_metrics.csv"
+    html_path = out_dir / "results_metrics.html"
+    df_results.to_csv(csv_path, index=False)
+    df_results.to_html(html_path, index=False)
+    print(f"[OK] Resultados guardados en:\n- {csv_path}\n- {html_path}")
+
+def main(target_choice: str, data_path: str, test_size: float):
+    print("[BOOT] Entré a main()")
+    df = load_dataset(data_path)
+
+    if "Y1" not in df.columns and "Heating Load" in df.columns:
+        df = df.rename(columns={"Heating Load": "Y1"})
+    if "Y2" not in df.columns and "Cooling Load" in df.columns:
+        df = df.rename(columns={"Cooling Load": "Y2"})
+
+    out_dir = Path("artifacts")
+    all_results = []
+
+    if target_choice.lower() in ("y1", "y2"):
+        res = run_for_target(df, target_choice.lower(), test_size)
+        all_results.append(res)
+    elif target_choice.lower() == "both":
+        res1 = run_for_target(df, "y1", test_size)
+        res2 = run_for_target(df, "y2", test_size)
+        all_results.extend([res1, res2])
+    else:
+        raise ValueError("Parámetro --target inválido. Usa: y1, y2 o both")
+
+    final_df = pd.concat(all_results, ignore_index=True)
+    save_results(final_df, out_dir)
+    print("[OK] Ejecución completa.")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Runner de experimentos – Energy Efficiency")
+    parser.add_argument("--target", type=str, default="both", help="y1 | y2 | both")
+    parser.add_argument("--data", type=str, default=DEFAULT_DATA, help="Ruta al CSV de datos")
+    parser.add_argument("--test_size", type=float, default=TEST_SIZE, help="Proporción del test split")
+    args = parser.parse_args()
+    main(target_choice=args.target, data_path=args.data, test_size=args.test_size)
