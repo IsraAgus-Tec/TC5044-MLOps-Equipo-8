@@ -45,8 +45,13 @@ N_SPLITS = 5
 TEST_SIZE = 0.2
 
 # MLflow: usa SQLite
-mlflow.set_tracking_uri("sqlite:///mlflow.db")
+#mlflow.set_tracking_uri("sqlite:///mlflow.db")
 mlflow.set_experiment(EXPERIMENT_NAME)
+
+def evaluate_and_log(...):
+    with mlflow.start_run(run_name=f"{model_name} | target={target_name}"):
+        mlflow.sklearn.autolog()
+        pipeline.fit(X_train, y_train)
 
 def load_dataset(path: str | Path) -> pd.DataFrame:
     path = Path(path)
