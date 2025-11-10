@@ -295,7 +295,7 @@ def main(target_choice: str, data_path: str, test_size: float):
     if "Y2" not in df.columns and "Cooling Load" in df.columns:
         df = df.rename(columns={"Cooling Load": "Y2"})
 
-    out_dir = Path("artifacts")
+    out_dir = OUT_DIR
     all_results = []
 
     if target_choice.lower() in ("y1", "y2"):
