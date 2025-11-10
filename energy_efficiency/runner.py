@@ -226,13 +226,38 @@ def run_for_target(df: pd.DataFrame, target_code: str, test_size: float) -> pd.D
     pre = build_preprocessor(X.columns)
     models = make_models()
 
-    results = []
-    for name, est in models.items():
-        pipe = Pipeline(steps=[("preprocess", pre), ("model", est)])
-        res = evaluate_and_log(name, pipe, X_train, X_test, y_train, y_test, target_name)
-        results.append(res)
+   results = {}
 
-    return pd.DataFrame(results)
+kf = KFold(n_splits=5, shuffle=True, random_state=SEED)
+scorer_r2 = "r2"
+scorer_mae = make_scorer(mean_absolute_error, greater_is_better=False)
+scorer_rmse = make_scorer(mean_squared_error, greater_is_better=False, squared=False)
+
+target_name = "+".join(y.columns)  # Ejemplo: "Heating+Cooling" o "Y1+Y2"
+
+for model_name, model in models.items():
+    pipe = Pipeline([("pre", preprocessor), ("model", model)])
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=test_size, random_state=SEED
+    )
+
+    # Aquí llamas a la función
+    holdout_metrics = evaluate_and_log(
+        model_name=model_name,
+        target_name=target_name,
+        pipeline=pipe,
+        X_train=X_train,
+        y_train=y_train,
+        X_test=X_test,
+        y_test=y_test,
+        kf=kf,
+        scorer_r2=scorer_r2,
+        scorer_mae=scorer_mae,
+        scorer_rmse=scorer_rmse,
+    )
+
+    results[model_name] = holdout_metrics
 
 def save_results(df_results: pd.DataFrame, out_dir: Path):
     out_dir.mkdir(parents=True, exist_ok=True)
