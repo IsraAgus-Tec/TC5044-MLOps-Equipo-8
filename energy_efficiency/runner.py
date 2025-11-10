@@ -11,7 +11,7 @@ import mlflow
 import mlflow.sklearn
 import numpy as np
 import pandas as pd
-from sklearn.base import clone
+from sklearn.base import BaseEstimator, TransformerMixin, clone
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
 from sklearn.impute import SimpleImputer
@@ -20,7 +20,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score, m
 from sklearn.model_selection import KFold, cross_validate, train_test_split
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import FunctionTransformer, StandardScaler
+from sklearn.preprocessing import StandardScaler
 
 
 DATASET_ERROR_MESSAGE = (
@@ -170,23 +170,33 @@ def rmse_metric(y_true, y_pred) -> float:
     return mean_squared_error(y_true_2d, y_pred_2d, squared=False)
 
 
-def _failsafe_replace_nan(X):
-    """Replace remaining NaNs or inf values with zero after preprocessing."""
-    if isinstance(X, pd.DataFrame):
-        sanitized = X.replace([np.inf, -np.inf], 0.0).fillna(0.0)
-        return sanitized.to_numpy(dtype=float, copy=False)
+class FailsafeTransformer(BaseEstimator, TransformerMixin):
+    """Ensure downstream estimators receive finite numeric arrays."""
 
-    arr = np.asarray(X, dtype=float)
-    if arr.size == 0:
+    def fit(self, X, y=None):  # noqa: D401 - simple passthrough
+        return self
+
+    def transform(self, X):
+        if isinstance(X, pd.DataFrame):
+            arr = X.replace([np.inf, -np.inf], np.nan).to_numpy(dtype=float, copy=False)
+        else:
+            arr = np.asarray(X, dtype=float)
+
+        if arr.size == 0:
+            return arr
+
+        arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
+
+        if arr.ndim == 1:
+            arr = arr.reshape(-1, 1)
+
         return arr
-    arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
-    return arr
 
 
 def build_pipeline(preprocessor: ColumnTransformer, base_estimator) -> Pipeline:
     """Construct a full pipeline with preprocessing and estimator."""
     preprocessor_clone = clone(preprocessor)
-    failsafe = FunctionTransformer(_failsafe_replace_nan, validate=False)
+    failsafe = FailsafeTransformer()
     model = MultiOutputRegressor(base_estimator)
     pipeline = Pipeline(
         steps=[
@@ -364,6 +374,7 @@ def log_mlflow_run(
         mlflow.log_artifact(str(csv_path), artifact_path="outputs")
         mlflow.log_artifact(str(html_path), artifact_path="outputs")
         input_example = X_sample.head(2).copy()
+        input_example = input_example.fillna(0)
         mlflow.sklearn.log_model(
             pipeline,
             artifact_path="model",
@@ -444,6 +455,18 @@ def main(argv: List[str] | None = None) -> int:
 
     if X_train.empty or X_test.empty:
         raise ValueError("El conjunto de entrenamiento o prueba está vacío después del split")
+
+    valid_train_columns = X_train.columns[X_train.notna().any(axis=0)]
+    if valid_train_columns.empty:
+        raise ValueError(
+            "No hay características válidas en el conjunto de entrenamiento tras la limpieza"
+        )
+
+    if len(valid_train_columns) != len(feature_names):
+        X_train = X_train[valid_train_columns].copy()
+        X_test = X_test[valid_train_columns].copy()
+        X = X[valid_train_columns].copy()
+        feature_names = list(valid_train_columns)
 
     preprocessor = build_preprocessor(feature_names)
 
