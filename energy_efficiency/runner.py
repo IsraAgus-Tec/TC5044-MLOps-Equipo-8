@@ -35,6 +35,25 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 
+from pathlib import Path
+import mlflow
+
+# Rutas base (independientes del CWD)
+HERE = Path(__file__).resolve().parent
+REPO = HERE.parent  # raíz del repo
+
+# Dataset por default (tal como lo tienes en GitHub)
+DEFAULT_DATA = (REPO / "data" / "energy_efficiency_modified.csv").as_posix()
+
+# Carpeta de salida: src/notebooks
+OUT_DIR = REPO / "src" / "notebooks"
+OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+# Asegurar MLflow en /mlruns
+MLRUNS_DIR = REPO / "mlruns"
+MLRUNS_DIR.mkdir(parents=True, exist_ok=True)
+mlflow.set_tracking_uri(f"file://{MLRUNS_DIR.as_posix()}")
+
 # -------------------------
 # Configuración por defecto
 # -------------------------
