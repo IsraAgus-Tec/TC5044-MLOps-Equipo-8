@@ -1,7 +1,3 @@
-energy_efficiency/runner.py
-New
-+509
--0
 
 """Runner script for Energy Efficiency project."""
 from __future__ import annotations
