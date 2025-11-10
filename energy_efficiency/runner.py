@@ -22,7 +22,6 @@ from sklearn.multioutput import MultiOutputRegressor
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
-
 DATASET_ERROR_MESSAGE = (
     "Dataset no encontrado. Debe estar en data/energy_efficiency_modified.csv o en "
     "data/processed/energy_efficiency_modified.csv"
@@ -33,13 +32,11 @@ EXPERIMENT_NAME = "Energy Efficiency – Ricardo Aguilar"
 TRACKING_URI = "file:./mlruns"
 TARGET_PRIORITIES = (["Y1", "Y2"], ["Heating Load", "Cooling Load"])
 
-
 @dataclass
 class ModelSpec:
     name: str
     estimator: object
     params: Dict[str, object]
-
 
 def load_data(dataset_paths: Iterable[Path]) -> pd.DataFrame:
     """Load dataset from preferred paths."""
@@ -70,7 +67,6 @@ def load_data(dataset_paths: Iterable[Path]) -> pd.DataFrame:
 
     raise FileNotFoundError(error_message)
 
-
 def detect_targets(df: pd.DataFrame) -> List[str]:
     """Detect target columns based on priority."""
     columns = set(df.columns)
@@ -82,12 +78,12 @@ def detect_targets(df: pd.DataFrame) -> List[str]:
         "['Heating Load','Cooling Load']"
     )
 
-
 def build_preprocessor(feature_names: List[str]) -> ColumnTransformer:
     """Build preprocessing pipeline for numeric features."""
     numeric_pipeline = Pipeline(
         steps=[
-            ("imputer", SimpleImputer(strategy="median")),
+            # Usamos SimpleImputer con keep_empty_features=True para imputar NaN incluso en columnas vacías
+            ("imputer", SimpleImputer(strategy="median", keep_empty_features=True)),
             ("scaler", StandardScaler()),
         ]
     )
@@ -96,7 +92,6 @@ def build_preprocessor(feature_names: List[str]) -> ColumnTransformer:
         remainder="drop",
     )
     return preprocessor
-
 
 def models_zoo(seed: int = DEFAULT_SEED) -> List[ModelSpec]:
     """Return a list of model specifications."""
@@ -140,7 +135,6 @@ def models_zoo(seed: int = DEFAULT_SEED) -> List[ModelSpec]:
     ]
     return models
 
-
 def _ensure_2d(array) -> np.ndarray:
     """Ensure arrays are two-dimensional for metric compatibility."""
     arr = np.asarray(array)
@@ -148,13 +142,11 @@ def _ensure_2d(array) -> np.ndarray:
         return arr.reshape(-1, 1)
     return arr
 
-
 def r2_metric(y_true, y_pred) -> float:
     """Compute R2 handling one-dimensional predictions."""
     y_true_2d = _ensure_2d(y_true)
     y_pred_2d = _ensure_2d(y_pred)
     return r2_score(y_true_2d, y_pred_2d, multioutput="uniform_average")
-
 
 def mae_metric(y_true, y_pred) -> float:
     """Compute MAE handling one-dimensional predictions."""
@@ -162,36 +154,31 @@ def mae_metric(y_true, y_pred) -> float:
     y_pred_2d = _ensure_2d(y_pred)
     return mean_absolute_error(y_true_2d, y_pred_2d, multioutput="uniform_average")
 
-
 def rmse_metric(y_true, y_pred) -> float:
     """Compute root mean squared error handling shape mismatches."""
     y_true_2d = _ensure_2d(y_true)
     y_pred_2d = _ensure_2d(y_pred)
     return mean_squared_error(y_true_2d, y_pred_2d, squared=False)
 
-
 class FailsafeTransformer(BaseEstimator, TransformerMixin):
     """Ensure downstream estimators receive finite numeric arrays."""
-
-    def fit(self, X, y=None):  # noqa: D401 - simple passthrough
+    def fit(self, X, y=None):
+        # Passthrough: no ajuste necesario
         return self
-
     def transform(self, X):
         if isinstance(X, pd.DataFrame):
+            # Reemplazar inf por NaN para poder manejarlos uniformemente
             arr = X.replace([np.inf, -np.inf], np.nan).to_numpy(dtype=float, copy=False)
         else:
             arr = np.asarray(X, dtype=float)
-
         if arr.size == 0:
             return arr
-
+        # Convertir NaN e inf a 0.0 (asegura que no queden valores infinitos o faltantes)
         arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
-
+        # Asegurar salida 2D
         if arr.ndim == 1:
             arr = arr.reshape(-1, 1)
-
         return arr
-
 
 def build_pipeline(preprocessor: ColumnTransformer, base_estimator) -> Pipeline:
     """Construct a full pipeline with preprocessing and estimator."""
@@ -206,7 +193,6 @@ def build_pipeline(preprocessor: ColumnTransformer, base_estimator) -> Pipeline:
         ]
     )
     return pipeline
-
 
 def evaluate_model(
     model_name: str,
@@ -223,8 +209,8 @@ def evaluate_model(
         "neg_mae": make_scorer(mae_metric, greater_is_better=False),
         "neg_rmse": make_scorer(rmse_metric, greater_is_better=False),
     }
-
     cv = KFold(n_splits=cv_splits, shuffle=True, random_state=DEFAULT_SEED)
+    # Validación cruzada (puede arrojar excepción si algún fold tiene problema con NaN)
     cv_results = cross_validate(
         clone(pipeline),
         X_train,
@@ -234,35 +220,29 @@ def evaluate_model(
         n_jobs=None,
         error_score="raise",
     )
-
+    # Entrenar en todo el conjunto de entrenamiento y evaluar en holdout
     fitted_pipeline = clone(pipeline)
     fitted_pipeline.fit(X_train, y_train)
     predictions = fitted_pipeline.predict(X_test)
-
     y_test_array = _ensure_2d(y_test)
     predictions_array = _ensure_2d(predictions)
-
     holdout_metrics = {
         "R2": float(r2_metric(y_test_array, predictions_array)),
         "MAE": float(mae_metric(y_test_array, predictions_array)),
         "RMSE": float(rmse_metric(y_test_array, predictions_array)),
     }
-
     cv_metrics = {
         "cv_R2_mean": float(np.mean(cv_results["test_r2"])),
         "cv_MAE_mean": float(-np.mean(cv_results["test_neg_mae"])),
         "cv_RMSE_mean": float(-np.mean(cv_results["test_neg_rmse"])),
     }
-
     return fitted_pipeline, holdout_metrics, cv_metrics
-
 
 def write_dashboard(metrics_df: pd.DataFrame, csv_path: Path, html_path: Path) -> None:
     """Persist metrics to CSV and HTML dashboard."""
     metrics_df_rounded = metrics_df.copy()
     metrics_df_rounded[["R2", "MAE", "RMSE"]] = metrics_df_rounded[["R2", "MAE", "RMSE"]].round(3)
     metrics_df_rounded.to_csv(csv_path, index=False)
-
     table_html = metrics_df_rounded.to_html(index=False, classes="results-table")
     style = """
     <style>
@@ -312,7 +292,6 @@ def write_dashboard(metrics_df: pd.DataFrame, csv_path: Path, html_path: Path) -
     }
     </style>
     """
-
     html_content = f"""
     <html>
     <head>
@@ -329,7 +308,6 @@ def write_dashboard(metrics_df: pd.DataFrame, csv_path: Path, html_path: Path) -
     </html>
     """
     html_path.write_text(html_content, encoding="utf-8")
-
 
 def log_mlflow_run(
     model_name: str,
@@ -350,7 +328,6 @@ def log_mlflow_run(
     mlflow.set_experiment(EXPERIMENT_NAME)
     experiment = mlflow.get_experiment_by_name(EXPERIMENT_NAME)
     experiment_id = experiment.experiment_id if experiment else ""
-
     general_params = {
         "seed": seed,
         "test_size": test_size,
@@ -359,7 +336,6 @@ def log_mlflow_run(
         "feature_names": ",".join(feature_names),
     }
     combined_params = {**general_params, **params}
-
     with mlflow.start_run(run_name=model_name) as run:
         run_id = run.info.run_id
         mlflow.log_params(combined_params)
@@ -373,6 +349,7 @@ def log_mlflow_run(
         )
         mlflow.log_artifact(str(csv_path), artifact_path="outputs")
         mlflow.log_artifact(str(html_path), artifact_path="outputs")
+        # Guardar ejemplo de entrada para MLflow (reemplazando NaN por 0 para el ejemplo)
         input_example = X_sample.head(2).copy()
         input_example = input_example.fillna(0)
         mlflow.sklearn.log_model(
@@ -382,7 +359,6 @@ def log_mlflow_run(
             registered_model_name=None,
         )
     return run_id, experiment_id
-
 
 def parse_args(args: List[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Energy Efficiency runner")
@@ -400,19 +376,16 @@ def parse_args(args: List[str]) -> argparse.Namespace:
     )
     return parser.parse_args(args)
 
-
 def main(argv: List[str] | None = None) -> int:
     args = parse_args(argv or [])
-
     if not 0 < args.test_size < 1:
         raise ValueError("--test_size debe estar en el rango (0,1)")
-
     base_dir = Path(__file__).resolve().parent
     project_root = base_dir.parent
     csv_path = base_dir / "results_metrics.csv"
     html_path = base_dir / "index.html"
     csv_path.parent.mkdir(parents=True, exist_ok=True)
-
+    # Cargar dataset
     dataset_paths = [
         project_root / "data" / "energy_efficiency_modified.csv",
         project_root / "data" / "processed" / "energy_efficiency_modified.csv",
@@ -420,61 +393,57 @@ def main(argv: List[str] | None = None) -> int:
     ]
     df = load_data(dataset_paths)
     target_candidates = detect_targets(df)
-
+    # Seleccionar columnas objetivo según el parámetro
     if args.target == "heating":
         selected_targets = [target_candidates[0]]
     elif args.target == "cooling":
         selected_targets = [target_candidates[1]]
     else:
         selected_targets = target_candidates
-
+    # Convertir objetivos a numérico y filtrar filas válidas (sin NaN en objetivos)
     df_targets = df[selected_targets].apply(pd.to_numeric, errors="coerce")
     df_targets = df_targets.replace([np.inf, -np.inf], np.nan)
     valid_rows = df_targets.notna().all(axis=1)
     df_targets = df_targets.loc[valid_rows]
-
+    # Preparar X (características), convertir a numérico y filtrar filas válidas
     X = df.drop(columns=selected_targets).apply(pd.to_numeric, errors="coerce")
     X = X.replace([np.inf, -np.inf], np.nan)
     X = X.loc[valid_rows]
+    # Eliminar columnas de características que estén totalmente vacías
     X = X.dropna(axis=1, how="all")
-
     if X.empty or not X.columns.any():
         raise ValueError("No hay características numéricas disponibles para el modelado")
-
     feature_names = X.columns.tolist()
-
     if len(X) == 0:
         raise ValueError("No hay filas disponibles tras limpiar los datos")
-
+    # Separar en entrenamiento y prueba
     X_train, X_test, y_train, y_test = train_test_split(
         X,
         df_targets,
         test_size=args.test_size,
         random_state=DEFAULT_SEED,
     )
-
     if X_train.empty or X_test.empty:
         raise ValueError("El conjunto de entrenamiento o prueba está vacío después del split")
-
+    # Verificar columnas válidas en entrenamiento (con al menos un valor no nulo)
     valid_train_columns = X_train.columns[X_train.notna().any(axis=0)]
     if valid_train_columns.empty:
         raise ValueError(
             "No hay características válidas en el conjunto de entrenamiento tras la limpieza"
         )
-
+    # Si hubo columnas eliminadas por estar vacías en entrenamiento, reflejarlo en X, X_test
     if len(valid_train_columns) != len(feature_names):
         X_train = X_train[valid_train_columns].copy()
         X_test = X_test[valid_train_columns].copy()
         X = X[valid_train_columns].copy()
         feature_names = list(valid_train_columns)
-
+    # Construir preprocesador y pipelines de modelos
     preprocessor = build_preprocessor(feature_names)
-
     model_specs = models_zoo(seed=DEFAULT_SEED)
     evaluation_records = []
-
     for spec in model_specs:
         pipeline = build_pipeline(preprocessor, spec.estimator)
+        # Evaluar modelo (entrenamiento, holdout y CV)
         fitted_pipeline, holdout_metrics, cv_metrics = evaluate_model(
             spec.name,
             pipeline,
@@ -493,7 +462,7 @@ def main(argv: List[str] | None = None) -> int:
                 "params": spec.params,
             }
         )
-
+    # Compilar métricas en DataFrame y escribir dashboard
     metrics_rows = [
         {
             "Model": record["name"],
@@ -505,10 +474,10 @@ def main(argv: List[str] | None = None) -> int:
     ]
     metrics_df = pd.DataFrame(metrics_rows)
     write_dashboard(metrics_df, csv_path, html_path)
-
+    # Imprimir resultados del holdout (redondeados)
     print("\nResultados de holdout:")
     print(metrics_df.round({"R2": 3, "MAE": 3, "RMSE": 3}).to_string(index=False))
-
+    # Registrar cada corrida en MLflow
     for record in evaluation_records:
         run_id, experiment_id = log_mlflow_run(
             model_name=record["name"],
@@ -525,14 +494,12 @@ def main(argv: List[str] | None = None) -> int:
             X_sample=X,
         )
         print(f"Run ID: {run_id} | Experiment ID: {experiment_id}")
-
+    # Rutas de resultados
     print(f"CSV:  {csv_path.resolve()}")
     print(f"HTML: {html_path.resolve()}")
     print("MLflow UI: mlflow ui --port 5000")
     print("Abre MLflow UI con: mlflow ui --port 5000")
-
     return 0
-
 
 if __name__ == "__main__":  # pragma: no cover
     sys.exit(main(sys.argv[1:]))
