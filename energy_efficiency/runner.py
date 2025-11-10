@@ -171,10 +171,16 @@ def rmse_metric(y_true, y_pred) -> float:
 
 
 def _failsafe_replace_nan(X):
-    """Replace remaining NaNs with zero after preprocessing."""
+    """Replace remaining NaNs or inf values with zero after preprocessing."""
     if isinstance(X, pd.DataFrame):
-        return X.fillna(0)
-    return np.nan_to_num(X, nan=0.0)
+        sanitized = X.replace([np.inf, -np.inf], 0.0).fillna(0.0)
+        return sanitized.to_numpy(dtype=float, copy=False)
+
+    arr = np.asarray(X, dtype=float)
+    if arr.size == 0:
+        return arr
+    arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
+    return arr
 
 
 def build_pipeline(preprocessor: ColumnTransformer, base_estimator) -> Pipeline:
