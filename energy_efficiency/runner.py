@@ -48,10 +48,62 @@ TEST_SIZE = 0.2
 #mlflow.set_tracking_uri("sqlite:///mlflow.db")
 mlflow.set_experiment(EXPERIMENT_NAME)
 
-def evaluate_and_log(...):
+def evaluate_and_log(
+    model_name: str,
+    target_name: str,
+    pipeline: Pipeline,
+    X_train,
+    y_train,
+    X_test,
+    y_test,
+    kf,
+    scorer_r2,
+    scorer_mae,
+    scorer_rmse,
+):
+    """
+    Entrena el pipeline, calcula métricas (holdout + CV) y las registra en MLflow.
+    Devuelve un dict con R2/MAE/RMSE (holdout).
+    """
+    # Puedes dejar autolog global (una vez) o aquí; aquí es simple y funciona.
+    mlflow.sklearn.autolog(log_models=True)
+
     with mlflow.start_run(run_name=f"{model_name} | target={target_name}"):
-        mlflow.sklearn.autolog()
+        # Entrenamiento
         pipeline.fit(X_train, y_train)
+
+        # Holdout
+        y_pred = pipeline.predict(X_test)
+
+        # Métricas holdout
+        r2 = float(r2_score(y_test, y_pred, multioutput="uniform_average"))
+        mae = float(mean_absolute_error(y_test, y_pred, multioutput="uniform_average"))
+        rmse = float(mean_squared_error(y_test, y_pred, multioutput="uniform_average", squared=False))
+
+        # Cross-Validation (en todo el set para promedio)
+        cv_r2 = float(cross_val_score(pipeline, X_train.append(X_test), y_train.append(y_test), cv=kf, scoring=scorer_r2).mean())
+        cv_mae = float(-cross_val_score(pipeline, X_train.append(X_test), y_train.append(y_test), cv=kf, scoring=scorer_mae).mean())
+        cv_rmse = float(-cross_val_score(pipeline, X_train.append(X_test), y_train.append(y_test), cv=kf, scoring=scorer_rmse).mean())
+
+        # Tags y métricas en MLflow
+        mlflow.set_tags({
+            "author": "Ricardo Aguilar",
+            "dataset": "Energy Efficiency",
+            "target": target_name,
+            "role": "Data Scientist",
+        })
+        mlflow.log_metrics({
+            "R2": r2,
+            "MAE": mae,
+            "RMSE": rmse,
+            "cv_R2_mean": cv_r2,
+            "cv_MAE_mean": cv_mae,
+            "cv_RMSE_mean": cv_rmse,
+        })
+
+        # (El modelo ya se guarda por autolog; si prefieres explícito, desactiva autolog y usa mlflow.sklearn.log_model)
+
+        return {"R2": r2, "MAE": mae, "RMSE": rmse}
 
 def load_dataset(path: str | Path) -> pd.DataFrame:
     path = Path(path)
