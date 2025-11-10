@@ -226,7 +226,7 @@ def run_for_target(df: pd.DataFrame, target_code: str, test_size: float) -> pd.D
     pre = build_preprocessor(X.columns)
     models = make_models()
 
-   results = {}
+    results = {}
 
 kf = KFold(n_splits=5, shuffle=True, random_state=SEED)
 scorer_r2 = "r2"
