@@ -8,140 +8,103 @@ Pipeline principal de experimentación para el proyecto de eficiencia energétic
 - Carga y preprocesa el dataset.
 - Entrena tres modelos: Linear Regression, Random Forest, Gradient Boosting.
 - Evalúa R², MAE y RMSE (Holdout + 5-Fold Cross-Validation).
-- Registra métricas y modelos en MLflow (backend SQLite para evitar el warning).
-- Exporta resultados en formato CSV y HTML.
+- Registra métricas y modelos en MLflow (tracking en carpeta local 'mlruns').
+- Exporta resultados en CSV y HTML (src/notebooks).
 
 Probado con:
-Python 3.9+ | scikit-learn >=1.3 | pandas >=2.2 | mlflow >=2.14
+Python 3.11+ | scikit-learn 1.3–1.7 | pandas 2.2–2.3 | mlflow 2.14+
 """
 
 from __future__ import annotations
+
 import argparse
 from pathlib import Path
 import warnings
+
 warnings.filterwarnings("ignore")
 
+# -----------------------------
+# Reproducibilidad global
+# -----------------------------
+SEED = 42
+RANDOM_STATE = SEED
+
 import numpy as np
+
+np.random.seed(SEED)
+
 import pandas as pd
 import mlflow
 import mlflow.sklearn
 
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
-from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
+from sklearn.metrics import (
+    r2_score,
+    mean_absolute_error,
+    mean_squared_error,
+)
 from sklearn.model_selection import train_test_split, KFold, cross_val_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 
-from pathlib import Path
-import mlflow
 
-# Rutas base (independientes del CWD)
+# -----------------------------
+# Rutas y configuración
+# -----------------------------
 HERE = Path(__file__).resolve().parent
-REPO = HERE.parent  # raíz del repo
+REPO = HERE.parent
 
-# Dataset por default (tal como lo tienes en GitHub)
-DEFAULT_DATA = (REPO / "data" / "energy_efficiency_modified.csv").as_posix()
+# Dataset por default (ajústalo si lo necesitas)
+DEFAULT_DATA = (REPO / "src" / "data" / "energy_efficiency_modified.csv").as_posix()
 
-# Carpeta de salida: src/notebooks
+# Carpeta de salida
 OUT_DIR = REPO / "src" / "notebooks"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# Asegurar MLflow en /mlruns
+# MLflow local (en carpeta 'mlruns' del repo)
 MLRUNS_DIR = REPO / "mlruns"
 MLRUNS_DIR.mkdir(parents=True, exist_ok=True)
 mlflow.set_tracking_uri(f"file://{MLRUNS_DIR.as_posix()}")
 
-# -------------------------
-# Configuración por defecto
-# -------------------------
-DEFAULT_DATA = "src/data/energy_efficiency_modified.csv"
 EXPERIMENT_NAME = "Energy Efficiency – Ricardo Aguilar"
-RANDOM_STATE = 42
 N_SPLITS = 5
 TEST_SIZE = 0.2
 
-# MLflow: usa SQLite
-#mlflow.set_tracking_uri("sqlite:///mlflow.db")
 mlflow.set_experiment(EXPERIMENT_NAME)
 
-def evaluate_and_log(
-    model_name: str,
-    target_name: str,
-    pipeline: Pipeline,
-    X_train,
-    y_train,
-    X_test,
-    y_test,
-    kf,
-    scorer_r2,
-    scorer_mae,
-    scorer_rmse,
-):
-    """
-    Entrena el pipeline, calcula métricas (holdout + CV) y las registra en MLflow.
-    Devuelve un dict con R2/MAE/RMSE (holdout).
-    """
-    # Puedes dejar autolog global (una vez) o aquí; aquí es simple y funciona.
-    mlflow.sklearn.autolog(log_models=True)
 
-    with mlflow.start_run(run_name=f"{model_name} | target={target_name}"):
-        # Entrenamiento
-        pipeline.fit(X_train, y_train)
-
-        # Holdout
-        y_pred = pipeline.predict(X_test)
-
-        # Métricas holdout
-        r2 = float(r2_score(y_test, y_pred, multioutput="uniform_average"))
-        mae = float(mean_absolute_error(y_test, y_pred, multioutput="uniform_average"))
-        rmse = float(mean_squared_error(y_test, y_pred, multioutput="uniform_average", squared=False))
-
-        # Cross-Validation (en todo el set para promedio)
-        cv_r2 = float(cross_val_score(pipeline, X_train.append(X_test), y_train.append(y_test), cv=kf, scoring=scorer_r2).mean())
-        cv_mae = float(-cross_val_score(pipeline, X_train.append(X_test), y_train.append(y_test), cv=kf, scoring=scorer_mae).mean())
-        cv_rmse = float(-cross_val_score(pipeline, X_train.append(X_test), y_train.append(y_test), cv=kf, scoring=scorer_rmse).mean())
-
-        # Tags y métricas en MLflow
-        mlflow.set_tags({
-            "author": "Ricardo Aguilar",
-            "dataset": "Energy Efficiency",
-            "target": target_name,
-            "role": "Data Scientist",
-        })
-        mlflow.log_metrics({
-            "R2": r2,
-            "MAE": mae,
-            "RMSE": rmse,
-            "cv_R2_mean": cv_r2,
-            "cv_MAE_mean": cv_mae,
-            "cv_RMSE_mean": cv_rmse,
-        })
-
-        # (El modelo ya se guarda por autolog; si prefieres explícito, desactiva autolog y usa mlflow.sklearn.log_model)
-
-        return {"R2": r2, "MAE": mae, "RMSE": rmse}
-
+# -----------------------------
+# Utilidades de datos
+# -----------------------------
 def load_dataset(path: str | Path) -> pd.DataFrame:
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"No se encontró el dataset en: {path.resolve()}")
     df = pd.read_csv(path)
+    # Sanitizar infinitos
     df = df.replace([np.inf, -np.inf], np.nan)
     return df
 
+
 def split_xy(df: pd.DataFrame, target_col: str):
-    if target_col not in df.columns:
-        mapping = {
-            "y1": ["Y1", "y1", "Heating Load", "Heating_Load"],
-            "y2": ["Y2", "y2", "Cooling Load", "Cooling_Load"],
-        }
-        for k, aliases in mapping.items():
-            if target_col.lower() == k and any(a in df.columns for a in aliases):
-                target_col = next(a for a in aliases if a in df.columns)
+    """
+    Soporta alias comunes: y1->Y1 (Heating), y2->Y2 (Cooling)
+    """
+    # Normalizar nombre de target
+    aliases = {
+        "y1": ["Y1", "y1", "Heating Load", "Heating_Load"],
+        "y2": ["Y2", "y2", "Cooling Load", "Cooling_Load"],
+    }
+    tc_lower = target_col.lower()
+    if tc_lower in aliases:
+        for cand in aliases[tc_lower]:
+            if cand in df.columns:
+                target_col = cand
                 break
+
     if target_col not in df.columns:
         raise ValueError(
             f"No existe la columna objetivo '{target_col}' en el dataset.\n"
@@ -151,28 +114,33 @@ def split_xy(df: pd.DataFrame, target_col: str):
     y = df[target_col].copy()
     X = df.drop(columns=[target_col]).copy()
 
+    # Filtrar filas con NaN en y
     mask_y = y.notna()
     if mask_y.sum() < len(y):
         print(f"[INFO] Filas eliminadas por NaN en y='{target_col}': {len(y) - mask_y.sum()}")
     X = X.loc[mask_y].reset_index(drop=True)
     y = y.loc[mask_y].reset_index(drop=True)
-    return X, y
+    return X, y, target_col
+
 
 def build_preprocessor(feature_names):
     numeric_features = list(feature_names)
-    numeric_transformer = Pipeline(steps=[
-        ("imputer", SimpleImputer(strategy="median")),
-        ("scaler", StandardScaler()),
-    ])
+    numeric_transformer = Pipeline(
+        steps=[
+            ("imputer", SimpleImputer(strategy="median")),
+            ("scaler", StandardScaler()),
+        ]
+    )
     preprocessor = ColumnTransformer(
         transformers=[("num", numeric_transformer, numeric_features)],
         remainder="drop",
     )
     return preprocessor
 
+
 def make_models():
     return {
-        "LinearRegression": LinearRegression(),
+        "LinearRegression": LinearRegression(),  # sin random_state
         "RandomForest": RandomForestRegressor(
             n_estimators=600, random_state=RANDOM_STATE, n_jobs=-1
         ),
@@ -181,39 +149,69 @@ def make_models():
         ),
     }
 
-def evaluate_and_log(model_name, pipeline, X_train, X_test, y_train, y_test, target_name):
+
+# -----------------------------
+# Entrenamiento + logging
+# -----------------------------
+def evaluate_and_log(
+    model_name: str,
+    pipeline: Pipeline,
+    X_train,
+    X_test,
+    y_train,
+    y_test,
+    target_name: str,
+):
+    """
+    Entrena el pipeline, calcula métricas holdout y CV, y las registra en MLflow.
+    Devuelve un dict con métricas agregadas.
+    """
+    mlflow.sklearn.autolog(log_models=True)
+
     with mlflow.start_run(run_name=f"{model_name} | target={target_name}"):
+        # Entrenamiento
         pipeline.fit(X_train, y_train)
 
+        # Holdout
         y_pred = pipeline.predict(X_test)
-        r2 = r2_score(y_test, y_pred)
-        mae = mean_absolute_error(y_test, y_pred)
-        rmse = mean_squared_error(y_test, y_pred, squared=False)
+        r2 = float(r2_score(y_test, y_pred))
+        mae = float(mean_absolute_error(y_test, y_pred))
+        rmse = float(mean_squared_error(y_test, y_pred, squared=False))
 
+        # Cross-Validation (en el set de entrenamiento)
         kf = KFold(n_splits=N_SPLITS, shuffle=True, random_state=RANDOM_STATE)
         cv_r2 = cross_val_score(pipeline, X_train, y_train, scoring="r2", cv=kf)
-        cv_mae = -cross_val_score(pipeline, X_train, y_train, scoring="neg_mean_absolute_error", cv=kf)
-        cv_rmse = (-cross_val_score(pipeline, X_train, y_train, scoring="neg_root_mean_squared_error", cv=kf))
+        cv_mae = -cross_val_score(
+            pipeline, X_train, y_train, scoring="neg_mean_absolute_error", cv=kf
+        )
+        cv_rmse = -cross_val_score(
+            pipeline, X_train, y_train, scoring="neg_root_mean_squared_error", cv=kf
+        )
 
-        mlflow.log_metric("holdout_r2", r2)
-        mlflow.log_metric("holdout_mae", mae)
-        mlflow.log_metric("holdout_rmse", rmse)
-        mlflow.log_metric("cv_r2_mean", float(np.mean(cv_r2)))
-        mlflow.log_metric("cv_r2_std", float(np.std(cv_r2)))
-        mlflow.log_metric("cv_mae_mean", float(np.mean(cv_mae)))
-        mlflow.log_metric("cv_mae_std", float(np.std(cv_mae)))
-        mlflow.log_metric("cv_rmse_mean", float(np.mean(cv_rmse)))
-        mlflow.log_metric("cv_rmse_std", float(np.std(cv_rmse)))
+        # Tags y métricas
+        mlflow.set_tags(
+            {
+                "author": "Ricardo Aguilar",
+                "dataset": "Energy Efficiency",
+                "target": target_name,
+                "role": "Data Scientist",
+            }
+        )
+        mlflow.log_metrics(
+            {
+                "holdout_r2": r2,
+                "holdout_mae": mae,
+                "holdout_rmse": rmse,
+                "cv_r2_mean": float(np.mean(cv_r2)),
+                "cv_r2_std": float(np.std(cv_r2)),
+                "cv_mae_mean": float(np.mean(cv_mae)),
+                "cv_mae_std": float(np.std(cv_mae)),
+                "cv_rmse_mean": float(np.mean(cv_rmse)),
+                "cv_rmse_std": float(np.std(cv_rmse)),
+            }
+        )
 
-        try:
-            mlflow.log_params({
-                k: v for k, v in pipeline.named_steps["model"].get_params().items()
-                if isinstance(v, (int, float, str, bool))
-            })
-        except Exception:
-            pass
-
-        mlflow.sklearn.log_model(pipeline, artifact_path="model")
+        # (Autolog ya registra el modelo y los parámetros del estimador)
 
         return {
             "target": target_name,
@@ -226,57 +224,26 @@ def evaluate_and_log(model_name, pipeline, X_train, X_test, y_train, y_test, tar
             "cv_rmse_mean": float(np.mean(cv_rmse)),
         }
 
+
 def run_for_target(df: pd.DataFrame, target_code: str, test_size: float) -> pd.DataFrame:
-    target_map = {"y1": "Y1", "y2": "Y2"}
-    target_name = target_map.get(target_code.lower(), target_code)
+    X, y, target_name = split_xy(df, target_code)
 
-    X, y = split_xy(df, target_name)
-
-    try:
-        nan_count_before = int(np.isnan(X.to_numpy(dtype=float, copy=False)).sum()) if len(X) else 0
-    except Exception:
-        nan_count_before = 0
-    print(f"[INFO] NaN en X antes del preprocesamiento (target={target_name}): {nan_count_before}")
-
+    # Split reproducible
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=test_size, random_state=RANDOM_STATE
+        X, y, test_size=test_size, shuffle=True, random_state=SEED
     )
 
     pre = build_preprocessor(X.columns)
     models = make_models()
 
-    results = {}
+    rows = []
+    for name, model in models.items():
+        pipe = Pipeline([("prep", pre), ("model", model)])
+        metrics = evaluate_and_log(name, pipe, X_train, X_test, y_train, y_test, target_name)
+        rows.append(metrics)
 
-kf = KFold(n_splits=5, shuffle=True, random_state=SEED)
-scorer_r2 = "r2"
-scorer_mae = make_scorer(mean_absolute_error, greater_is_better=False)
-scorer_rmse = make_scorer(mean_squared_error, greater_is_better=False, squared=False)
+    return pd.DataFrame(rows)
 
-target_name = "+".join(y.columns)  # Ejemplo: "Heating+Cooling" o "Y1+Y2"
-
-for model_name, model in models.items():
-    pipe = Pipeline([("pre", preprocessor), ("model", model)])
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=test_size, random_state=SEED
-    )
-
-    # Aquí llamas a la función
-    holdout_metrics = evaluate_and_log(
-        model_name=model_name,
-        target_name=target_name,
-        pipeline=pipe,
-        X_train=X_train,
-        y_train=y_train,
-        X_test=X_test,
-        y_test=y_test,
-        kf=kf,
-        scorer_r2=scorer_r2,
-        scorer_mae=scorer_mae,
-        scorer_rmse=scorer_rmse,
-    )
-
-    results[model_name] = holdout_metrics
 
 def save_results(df_results: pd.DataFrame, out_dir: Path):
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -286,16 +253,20 @@ def save_results(df_results: pd.DataFrame, out_dir: Path):
     df_results.to_html(html_path, index=False)
     print(f"[OK] Resultados guardados en:\n- {csv_path}\n- {html_path}")
 
+
+# -----------------------------
+# Main
+# -----------------------------
 def main(target_choice: str, data_path: str, test_size: float):
     print("[BOOT] Entré a main()")
     df = load_dataset(data_path)
 
+    # Normalizar nombres si vienen como Heating/Cooling
     if "Y1" not in df.columns and "Heating Load" in df.columns:
         df = df.rename(columns={"Heating Load": "Y1"})
     if "Y2" not in df.columns and "Cooling Load" in df.columns:
         df = df.rename(columns={"Cooling Load": "Y2"})
 
-    out_dir = OUT_DIR
     all_results = []
 
     if target_choice.lower() in ("y1", "y2"):
@@ -309,8 +280,9 @@ def main(target_choice: str, data_path: str, test_size: float):
         raise ValueError("Parámetro --target inválido. Usa: y1, y2 o both")
 
     final_df = pd.concat(all_results, ignore_index=True)
-    save_results(final_df, out_dir)
+    save_results(final_df, OUT_DIR)
     print("[OK] Ejecución completa.")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Runner de experimentos – Energy Efficiency")
