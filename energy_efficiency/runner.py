@@ -225,3 +225,27 @@ def main(target_choice="both", test_size=0.2):
     print(f"\nCSV:  {OUT_CSV.resolve()}")
     print(f"HTML: {OUT_HTML.resolve()}")
     print("MLflow UI: mlflow ui --port 5000")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run Energy Efficiency experiments")
+    parser.add_argument(
+        "--target",
+        choices=["heating", "cooling", "both"],
+        default="both",
+        help="Qué objetivo entrenar (heating, cooling o both)",
+    )
+    parser.add_argument(
+        "--test_size",
+        type=float,
+        default=0.2,
+        help="Proporción para el conjunto de prueba (0.0–1.0)",
+    )
+    args = parser.parse_args()
+
+    # Asegura MLflow a la carpeta local y el experimento esperado
+    mlflow.set_tracking_uri(TRACKING_URI)
+    mlflow.set_experiment(EXPERIMENT_NAME)
+
+    # Ejecuta
+    main(target_choice=args.target, test_size=args.test_size)
+
