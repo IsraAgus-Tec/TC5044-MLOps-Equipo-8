@@ -1,5 +1,5 @@
 """
-run_experiments.py
+runner.py
 Autor: Ricardo Aguilar
 Rol: Data Scientist
 
@@ -273,4 +273,3 @@ if __name__ == "__main__":
 
     # Ejecuta
     main(target_choice=args.target, test_size=args.test_size)
-
