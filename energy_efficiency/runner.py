@@ -8,14 +8,16 @@ Pipeline principal de experimentación para el proyecto de eficiencia energétic
 - Carga y preprocesa el dataset.
 - Entrena tres modelos: Linear Regression, Random Forest, Gradient Boosting.
 - Evalúa R², MAE y RMSE (Holdout + 5-Fold Cross-Validation).
-- Registra métricas y modelos en MLflow.
-- Exporta resultados en formato CSV y HTML.
+- Registra métricas y modelos en MLflow (carpeta 'mlruns' en la raíz del repo).
+- Exporta resultados en CSV y HTML junto a este archivo.
 
 Probado con:
 Python 3.9.6 | scikit-learn 1.3.2 | pandas 2.2.2 | mlflow 2.14.1
 """
 
+from __future__ import annotations
 import argparse
+import traceback
 from pathlib import Path
 
 import numpy as np
@@ -30,25 +32,32 @@ from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.model_selection import train_test_split, KFold, cross_val_score
-from sklearn.metrics import (
-    r2_score,
-    mean_absolute_error,
-    mean_squared_error,
-    make_scorer,
-)
+from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error, make_scorer
 
 # ========================
-# CONFIGURACIÓN GLOBAL
+# CONFIGURACIÓN GLOBAL (robusta a CWD)
 # ========================
 
 SEED = 42
-TRACKING_URI = "file:./mlruns"
-EXPERIMENT_NAME = "Energy Efficiency – Ricardo Aguilar"
 
-DATA_PATH = Path("data/processed/energy_efficiency_modified.csv")
-OUT_DIR = Path(__file__).resolve().parent
+HERE = Path(__file__).resolve().parent              # carpeta del archivo
+REPO = HERE.parent                                  # raíz del repo (ajústalo si tu layout es distinto)
+
+DATA_PATH = REPO / "data/processed/energy_efficiency_modified.csv"
+OUT_DIR = HERE
+OUT_DIR.mkdir(parents=True, exist_ok=True)
 OUT_CSV = OUT_DIR / "results_metrics.csv"
 OUT_HTML = OUT_DIR / "index.html"
+
+# MLflow -> URI ABSOLUTA al 'mlruns' del repo (no depende del CWD)
+MLRUNS_DIR = REPO / "mlruns"
+MLRUNS_DIR.mkdir(parents=True, exist_ok=True)
+TRACKING_URI = f"file://{MLRUNS_DIR.as_posix()}"
+EXPERIMENT_NAME = "Energy Efficiency – Ricardo Aguilar"
+
+# Inicializa MLflow una sola vez
+mlflow.set_tracking_uri(TRACKING_URI)
+mlflow.set_experiment(EXPERIMENT_NAME)
 
 
 # ========================
@@ -57,8 +66,8 @@ OUT_HTML = OUT_DIR / "index.html"
 
 def detect_targets(df: pd.DataFrame):
     """
-    Detecta las columnas objetivo en el dataset.
-    Retorna una lista con las columnas de Heating y Cooling Load.
+    Detecta columnas objetivo y retorna lista [Y1, Y2].
+    Acepta variantes de nombre.
     """
     candidates = [
         ("heating_load", "cooling_load"),
@@ -69,46 +78,46 @@ def detect_targets(df: pd.DataFrame):
     for a, b in candidates:
         if a in cols and b in cols:
             return [a, b]
-    raise ValueError("No se encontraron columnas de target válidas.")
+    # Permite caso de 1 sola target si existe
+    for single in ("heating_load", "Heating Load", "Y1", "cooling_load", "Cooling Load", "Y2"):
+        if single in cols:
+            return [single]
+    raise ValueError("No se encontraron columnas objetivo válidas (Y1/Y2 o Heating/Cooling).")
 
 
 def metric_bundle(y_true, y_pred):
-    """Calcula R², MAE y RMSE y devuelve un diccionario de métricas."""
+    """Calcula R², MAE y RMSE y devuelve un diccionario de métricas (multioutput-aware)."""
     return {
         "R2": float(r2_score(y_true, y_pred, multioutput="uniform_average")),
         "MAE": float(mean_absolute_error(y_true, y_pred, multioutput="uniform_average")),
-        "RMSE": float(
-            mean_squared_error(y_true, y_pred, multioutput="uniform_average", squared=False)
-        ),
+        "RMSE": float(mean_squared_error(y_true, y_pred, multioutput="uniform_average", squared=False)),
     }
 
 
 def build_preprocessor(feature_cols):
-    """Crea un transformador de características numéricas con estandarización."""
+    """Transformador numérico con estandarización."""
     return ColumnTransformer(
-        transformers=[("num", StandardScaler(), feature_cols)],
+        transformers=[("num", StandardScaler(), list(feature_cols))],
         remainder="drop",
         verbose_feature_names_out=False,
     )
 
 
 def models_zoo(seed=SEED):
-    """Define los modelos base a entrenar y devuelve un diccionario."""
+    """Define y devuelve los modelos a entrenar."""
     return {
         "Linear Regression": LinearRegression(),
         "Random Forest": MultiOutputRegressor(
             RandomForestRegressor(n_estimators=600, random_state=seed, n_jobs=-1)
         ),
         "Gradient Boosting": MultiOutputRegressor(
-            GradientBoostingRegressor(
-                learning_rate=0.1, max_depth=3, n_estimators=100, random_state=seed
-            )
+            GradientBoostingRegressor(learning_rate=0.1, max_depth=3, n_estimators=100, random_state=seed)
         ),
     }
 
 
 def write_dashboard(results: dict):
-    """Genera archivos CSV y HTML con los resultados finales."""
+    """Genera CSV y HTML con resultados finales en OUT_DIR."""
     df = pd.DataFrame([{"Model": k, **v} for k, v in results.items()])
     df = df[["Model", "R2", "MAE", "RMSE"]].round(3)
     df.to_csv(OUT_CSV, index=False)
@@ -141,13 +150,9 @@ def write_dashboard(results: dict):
 
 
 def log_mlflow(model_name, metrics, pipeline):
-    """Registra métricas y modelo en MLflow."""
-    mlflow.set_tracking_uri(TRACKING_URI)
-    mlflow.set_experiment(EXPERIMENT_NAME)
+    """Registra métricas y modelo en MLflow (usa tracking_uri ya inicializado)."""
     with mlflow.start_run(run_name=model_name):
-        mlflow.set_tags(
-            {"author": "Ricardo Aguilar", "dataset": "Energy Efficiency", "role": "Data Scientist"}
-        )
+        mlflow.set_tags({"author": "Ricardo Aguilar", "dataset": "Energy Efficiency", "role": "Data Scientist"})
         mlflow.log_metrics(metrics)
         mlflow.sklearn.log_model(pipeline, artifact_path="model")
 
@@ -157,19 +162,26 @@ def log_mlflow(model_name, metrics, pipeline):
 # ========================
 
 def main(target_choice="both", test_size=0.2):
-    """Ejecuta el flujo completo de experimentación."""
+    print("[PATHS]")
+    print(f"REPO   : {REPO}")
+    print(f"HERE   : {HERE}")
+    print(f"DATA   : {DATA_PATH}")
+    print(f"MLRUNS : {MLRUNS_DIR}")
+    print(f"OUT_DIR: {OUT_DIR}\n")
+
     if not DATA_PATH.exists():
-        raise FileNotFoundError(f"No se encontró el dataset en: {DATA_PATH.resolve()}")
+        raise FileNotFoundError(f"No se encontró el dataset en: {DATA_PATH}")
 
     df = pd.read_csv(DATA_PATH)
     targets = detect_targets(df)
 
-    if target_choice == "heating":
+    # Filtra targets según parámetro
+    if target_choice == "heating" and len(targets) >= 1:
         y_cols = [targets[0]]
-    elif target_choice == "cooling":
+    elif target_choice == "cooling" and len(targets) >= 2:
         y_cols = [targets[1]]
     else:
-        y_cols = targets
+        y_cols = targets  # both o single disponible
 
     y = df[y_cols].copy()
     X = df[[c for c in df.columns if c not in y_cols]].copy()
@@ -186,11 +198,10 @@ def main(target_choice="both", test_size=0.2):
 
     for name, model in models.items():
         pipe = Pipeline([("pre", preprocessor), ("model", model)])
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=test_size, random_state=SEED
-        )
 
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=SEED)
         pipe.fit(X_train, y_train)
+
         y_pred = pipe.predict(X_test)
         holdout_metrics = metric_bundle(y_test, y_pred)
 
@@ -210,9 +221,9 @@ def main(target_choice="both", test_size=0.2):
                 "R2": holdout_metrics["R2"],
                 "MAE": holdout_metrics["MAE"],
                 "RMSE": holdout_metrics["RMSE"],
-                "cv_R2_mean": cv_r2,
-                "cv_MAE_mean": cv_mae,
-                "cv_RMSE_mean": cv_rmse,
+                "cv_R2_mean": float(cv_r2),
+                "cv_MAE_mean": float(cv_mae),
+                "cv_RMSE_mean": float(cv_rmse),
             },
             pipeline=pipe,
         )
@@ -222,30 +233,23 @@ def main(target_choice="both", test_size=0.2):
     print("\nResultados promedio (Holdout):")
     for m, v in results.items():
         print(f"{m:>20s} | R2={v['R2']:.3f}  MAE={v['MAE']:.3f}  RMSE={v['RMSE']:.3f}")
-    print(f"\nCSV:  {OUT_CSV.resolve()}")
-    print(f"HTML: {OUT_HTML.resolve()}")
-    print("MLflow UI: mlflow ui --port 5000")
+    print(f"\nCSV : {OUT_CSV}")
+    print(f"HTML: {OUT_HTML}")
+    print(f"MLflow Tracking URI -> {mlflow.get_tracking_uri()}")
+    print("Para ver la UI: mlflow ui --backend-store-uri \"{uri}\" --port 5000".format(uri=mlflow.get_tracking_uri()))
+    print()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Energy Efficiency experiments")
-    parser.add_argument(
-        "--target",
-        choices=["heating", "cooling", "both"],
-        default="both",
-        help="Qué objetivo entrenar (heating, cooling o both)",
-    )
-    parser.add_argument(
-        "--test_size",
-        type=float,
-        default=0.2,
-        help="Proporción para el conjunto de prueba (0.0–1.0)",
-    )
+    parser.add_argument("--target", choices=["heating", "cooling", "both"], default="both",
+                        help="Qué objetivo entrenar (heating, cooling o both)")
+    parser.add_argument("--test_size", type=float, default=0.2, help="Proporción para el conjunto de prueba (0.0–1.0)")
     args = parser.parse_args()
 
-    # Asegura MLflow a la carpeta local y el experimento esperado
-    mlflow.set_tracking_uri(TRACKING_URI)
-    mlflow.set_experiment(EXPERIMENT_NAME)
-
-    # Ejecuta
-    main(target_choice=args.target, test_size=args.test_size)
-
+    try:
+        main(target_choice=args.target, test_size=args.test_size)
+    except Exception:
+        print("\n[ERROR] El pipeline falló. Traceback completo:\n")
+        traceback.print_exc()
+        raise
