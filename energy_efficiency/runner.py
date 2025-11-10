@@ -39,12 +39,11 @@ class ModelSpec:
     params: Dict[str, object]
 
 def load_data(dataset_paths: Iterable[Path]) -> pd.DataFrame:
-    """Load dataset from preferred paths."""
     for path in dataset_paths:
         if path.exists():
             try:
                 df = pd.read_csv(path)
-            except Exception as exc:  # pragma: no cover - defensive
+            except Exception as exc:
                 raise RuntimeError(f"Error al cargar el dataset en {path}: {exc}") from exc
             if df.empty:
                 raise ValueError("El dataset está vacío")
@@ -68,34 +67,26 @@ def load_data(dataset_paths: Iterable[Path]) -> pd.DataFrame:
     raise FileNotFoundError(error_message)
 
 def detect_targets(df: pd.DataFrame) -> List[str]:
-    """Detect target columns based on priority."""
     columns = set(df.columns)
     for candidates in TARGET_PRIORITIES:
         if all(target in columns for target in candidates):
             return list(candidates)
-    raise ValueError(
-        "No se encontraron columnas objetivo válidas. Se esperaba ['Y1','Y2'] o "
-        "['Heating Load','Cooling Load']"
-    )
+    raise ValueError("No se encontraron columnas objetivo válidas. Se esperaba ['Y1','Y2'] o ['Heating Load','Cooling Load']")
 
 def build_preprocessor(feature_names: List[str]) -> ColumnTransformer:
-    """Build preprocessing pipeline for numeric features."""
     numeric_pipeline = Pipeline(
         steps=[
-            # Usamos SimpleImputer con keep_empty_features=True para imputar NaN incluso en columnas vacías
             ("imputer", SimpleImputer(strategy="median", keep_empty_features=True)),
             ("scaler", StandardScaler()),
         ]
     )
-    preprocessor = ColumnTransformer(
+    return ColumnTransformer(
         transformers=[("num", numeric_pipeline, feature_names)],
         remainder="drop",
     )
-    return preprocessor
 
 def models_zoo(seed: int = DEFAULT_SEED) -> List[ModelSpec]:
-    """Return a list of model specifications."""
-    models: List[ModelSpec] = [
+    return [
         ModelSpec(
             name="Linear Regression",
             estimator=LinearRegression(),
@@ -103,289 +94,126 @@ def models_zoo(seed: int = DEFAULT_SEED) -> List[ModelSpec]:
         ),
         ModelSpec(
             name="Random Forest",
-            estimator=RandomForestRegressor(
-                n_estimators=600,
-                random_state=seed,
-                n_jobs=-1,
-            ),
-            params={
-                "model": "RandomForestRegressor",
-                "n_estimators": 600,
-                "max_depth": None,
-                "n_jobs": -1,
-                "random_state": seed,
-            },
+            estimator=RandomForestRegressor(n_estimators=600, random_state=seed, n_jobs=-1),
+            params={"model": "RandomForestRegressor", "n_estimators": 600, "n_jobs": -1, "random_state": seed},
         ),
         ModelSpec(
             name="Gradient Boosting",
-            estimator=GradientBoostingRegressor(
-                learning_rate=0.1,
-                max_depth=3,
-                n_estimators=100,
-                random_state=seed,
-            ),
-            params={
-                "model": "GradientBoostingRegressor",
-                "learning_rate": 0.1,
-                "max_depth": 3,
-                "n_estimators": 100,
-                "random_state": seed,
-            },
+            estimator=GradientBoostingRegressor(learning_rate=0.1, max_depth=3, n_estimators=100, random_state=seed),
+            params={"model": "GradientBoostingRegressor", "learning_rate": 0.1, "max_depth": 3, "n_estimators": 100, "random_state": seed},
         ),
     ]
-    return models
 
 def _ensure_2d(array) -> np.ndarray:
-    """Ensure arrays are two-dimensional for metric compatibility."""
     arr = np.asarray(array)
-    if arr.ndim == 1:
-        return arr.reshape(-1, 1)
-    return arr
+    return arr.reshape(-1, 1) if arr.ndim == 1 else arr
 
 def r2_metric(y_true, y_pred) -> float:
-    """Compute R2 handling one-dimensional predictions."""
-    y_true_2d = _ensure_2d(y_true)
-    y_pred_2d = _ensure_2d(y_pred)
-    return r2_score(y_true_2d, y_pred_2d, multioutput="uniform_average")
+    return r2_score(_ensure_2d(y_true), _ensure_2d(y_pred), multioutput="uniform_average")
 
 def mae_metric(y_true, y_pred) -> float:
-    """Compute MAE handling one-dimensional predictions."""
-    y_true_2d = _ensure_2d(y_true)
-    y_pred_2d = _ensure_2d(y_pred)
-    return mean_absolute_error(y_true_2d, y_pred_2d, multioutput="uniform_average")
+    return mean_absolute_error(_ensure_2d(y_true), _ensure_2d(y_pred), multioutput="uniform_average")
 
 def rmse_metric(y_true, y_pred) -> float:
-    """Compute root mean squared error handling shape mismatches."""
-    y_true_2d = _ensure_2d(y_true)
-    y_pred_2d = _ensure_2d(y_pred)
-    return mean_squared_error(y_true_2d, y_pred_2d, squared=False)
+    return mean_squared_error(_ensure_2d(y_true), _ensure_2d(y_pred), squared=False)
 
 class FailsafeTransformer(BaseEstimator, TransformerMixin):
-    """Ensure downstream estimators receive finite numeric arrays."""
-    def fit(self, X, y=None):
-        # Passthrough: no ajuste necesario
-        return self
+    def fit(self, X, y=None): return self
     def transform(self, X):
         if isinstance(X, pd.DataFrame):
-            # Reemplazar inf por NaN para poder manejarlos uniformemente
             arr = X.replace([np.inf, -np.inf], np.nan).to_numpy(dtype=float, copy=False)
         else:
             arr = np.asarray(X, dtype=float)
-        if arr.size == 0:
-            return arr
-        # Convertir NaN e inf a 0.0 (asegura que no queden valores infinitos o faltantes)
         arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
-        # Asegurar salida 2D
-        if arr.ndim == 1:
-            arr = arr.reshape(-1, 1)
-        return arr
+        return arr.reshape(-1, 1) if arr.ndim == 1 else arr
 
 def build_pipeline(preprocessor: ColumnTransformer, base_estimator) -> Pipeline:
-    """Construct a full pipeline with preprocessing and estimator."""
-    preprocessor_clone = clone(preprocessor)
-    failsafe = FailsafeTransformer()
-    model = MultiOutputRegressor(base_estimator)
-    pipeline = Pipeline(
-        steps=[
-            ("preprocessor", preprocessor_clone),
-            ("failsafe", failsafe),
-            ("regressor", model),
-        ]
-    )
-    return pipeline
+    return Pipeline([
+        ("preprocessor", clone(preprocessor)),
+        ("failsafe", FailsafeTransformer()),
+        ("regressor", MultiOutputRegressor(base_estimator)),
+    ])
 
-def evaluate_model(
-    model_name: str,
-    pipeline: Pipeline,
-    X_train: pd.DataFrame,
-    X_test: pd.DataFrame,
-    y_train: pd.DataFrame,
-    y_test: pd.DataFrame,
-    cv_splits: int,
-) -> Tuple[Pipeline, Dict[str, float], Dict[str, float]]:
-    """Fit pipeline, evaluate holdout and cross-validation metrics."""
+def evaluate_model(model_name, pipeline, X_train, X_test, y_train, y_test, cv_splits):
     scoring = {
         "r2": make_scorer(r2_metric),
         "neg_mae": make_scorer(mae_metric, greater_is_better=False),
         "neg_rmse": make_scorer(rmse_metric, greater_is_better=False),
     }
     cv = KFold(n_splits=cv_splits, shuffle=True, random_state=DEFAULT_SEED)
-    # Validación cruzada (puede arrojar excepción si algún fold tiene problema con NaN)
-    cv_results = cross_validate(
-        clone(pipeline),
-        X_train,
-        y_train,
-        cv=cv,
-        scoring=scoring,
-        n_jobs=None,
-        error_score="raise",
-    )
-    # Entrenar en todo el conjunto de entrenamiento y evaluar en holdout
+    cv_results = cross_validate(clone(pipeline), X_train, y_train, cv=cv, scoring=scoring, error_score="raise")
+
     fitted_pipeline = clone(pipeline)
     fitted_pipeline.fit(X_train, y_train)
-    predictions = fitted_pipeline.predict(X_test)
-    y_test_array = _ensure_2d(y_test)
-    predictions_array = _ensure_2d(predictions)
-    holdout_metrics = {
-        "R2": float(r2_metric(y_test_array, predictions_array)),
-        "MAE": float(mae_metric(y_test_array, predictions_array)),
-        "RMSE": float(rmse_metric(y_test_array, predictions_array)),
-    }
-    cv_metrics = {
-        "cv_R2_mean": float(np.mean(cv_results["test_r2"])),
-        "cv_MAE_mean": float(-np.mean(cv_results["test_neg_mae"])),
-        "cv_RMSE_mean": float(-np.mean(cv_results["test_neg_rmse"])),
-    }
-    return fitted_pipeline, holdout_metrics, cv_metrics
+    preds = fitted_pipeline.predict(X_test)
+    return (
+        fitted_pipeline,
+        {
+            "R2": r2_metric(y_test, preds),
+            "MAE": mae_metric(y_test, preds),
+            "RMSE": rmse_metric(y_test, preds),
+        },
+        {
+            "cv_R2_mean": np.mean(cv_results["test_r2"]),
+            "cv_MAE_mean": -np.mean(cv_results["test_neg_mae"]),
+            "cv_RMSE_mean": -np.mean(cv_results["test_neg_rmse"]),
+        },
+    )
 
-def write_dashboard(metrics_df: pd.DataFrame, csv_path: Path, html_path: Path) -> None:
-    """Persist metrics to CSV and HTML dashboard."""
-    metrics_df_rounded = metrics_df.copy()
-    metrics_df_rounded[["R2", "MAE", "RMSE"]] = metrics_df_rounded[["R2", "MAE", "RMSE"]].round(3)
+def write_dashboard(metrics_df, csv_path, html_path):
+    metrics_df_rounded = metrics_df.round({"R2": 3, "MAE": 3, "RMSE": 3})
     metrics_df_rounded.to_csv(csv_path, index=False)
-    table_html = metrics_df_rounded.to_html(index=False, classes="results-table")
-    style = """
-    <style>
-    body {
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        background-color: #f5f7fa;
-        margin: 0;
-        padding: 2rem;
-        color: #0b2545;
-    }
-    h1 {
-        color: #0b3d91;
-        text-align: center;
-        margin-bottom: 1.5rem;
-    }
-    .table-container {
-        max-width: 900px;
-        margin: 0 auto;
-        background: #ffffff;
-        border-radius: 12px;
-        box-shadow: 0 10px 30px rgba(11, 61, 145, 0.1);
-        padding: 2rem;
-    }
-    table.results-table {
-        width: 100%;
-        border-collapse: collapse;
-    }
-    table.results-table thead {
-        background-color: #0b3d91;
-        color: #ffffff;
-        position: sticky;
-        top: 0;
-    }
-    table.results-table th,
-    table.results-table td {
-        padding: 12px 16px;
-        text-align: center;
-    }
-    table.results-table tbody tr:nth-child(odd) {
-        background-color: #e6ecfa;
-    }
-    table.results-table tbody tr:nth-child(even) {
-        background-color: #ffffff;
-    }
-    table.results-table tbody tr:hover {
-        background-color: #d0dbf7;
-    }
-    </style>
-    """
     html_content = f"""
-    <html>
-    <head>
-        <meta charset='utf-8'>
-        <title>Resultados de Experimentos – Energy Efficiency</title>
-        {style}
-    </head>
-    <body>
-        <div class='table-container'>
-            <h1>Resultados de Experimentos – Energy Efficiency</h1>
-            {table_html}
-        </div>
-    </body>
-    </html>
+    <html><head><meta charset='utf-8'><title>Resultados</title><style>
+    body {{ font-family: sans-serif; background: #f4f4f4; padding: 2rem; }}
+    table {{ width: 100%; border-collapse: collapse; }}
+    th, td {{ border: 1px solid #ccc; padding: 8px; text-align: center; }}
+    th {{ background: #0b3d91; color: #fff; }}
+    </style></head><body>
+    <h1>Resultados de Experimentos – Energy Efficiency</h1>
+    {metrics_df_rounded.to_html(index=False)}
+    </body></html>
     """
     html_path.write_text(html_content, encoding="utf-8")
 
-def log_mlflow_run(
-    model_name: str,
-    pipeline: Pipeline,
-    holdout_metrics: Dict[str, float],
-    cv_metrics: Dict[str, float],
-    params: Dict[str, object],
-    feature_names: List[str],
-    target_choice: List[str],
-    test_size: float,
-    seed: int,
-    csv_path: Path,
-    html_path: Path,
-    X_sample: pd.DataFrame,
-) -> Tuple[str, str]:
-    """Log run information to MLflow and return run and experiment IDs."""
+def log_mlflow_run(model_name, pipeline, holdout_metrics, cv_metrics, params, feature_names, target_choice, test_size, seed, csv_path, html_path, X_sample):
     mlflow.set_tracking_uri(TRACKING_URI)
     mlflow.set_experiment(EXPERIMENT_NAME)
     experiment = mlflow.get_experiment_by_name(EXPERIMENT_NAME)
     experiment_id = experiment.experiment_id if experiment else ""
-    general_params = {
-        "seed": seed,
-        "test_size": test_size,
-        "target_choice": ",".join(target_choice),
-        "n_features": len(feature_names),
-        "feature_names": ",".join(feature_names),
-    }
-    combined_params = {**general_params, **params}
     with mlflow.start_run(run_name=model_name) as run:
         run_id = run.info.run_id
-        mlflow.log_params(combined_params)
+        mlflow.log_params({**{
+            "seed": seed,
+            "test_size": test_size,
+            "target_choice": ",".join(target_choice),
+            "n_features": len(feature_names),
+            "feature_names": ",".join(feature_names),
+        }, **params})
         mlflow.log_metrics({**holdout_metrics, **cv_metrics})
-        mlflow.set_tags(
-            {
-                "author": "Ricardo Aguilar",
-                "dataset": "Energy Efficiency",
-                "role": "Data Scientist",
-            }
-        )
+        mlflow.set_tags({"author": "Ricardo Aguilar", "dataset": "Energy Efficiency"})
         mlflow.log_artifact(str(csv_path), artifact_path="outputs")
         mlflow.log_artifact(str(html_path), artifact_path="outputs")
-        # Guardar ejemplo de entrada para MLflow (reemplazando NaN por 0 para el ejemplo)
-        input_example = X_sample.head(2).copy()
-        input_example = input_example.fillna(0)
         mlflow.sklearn.log_model(
             pipeline,
             artifact_path="model",
-            input_example=input_example,
+            input_example=X_sample.head(2).fillna(0),
             registered_model_name=None,
         )
     return run_id, experiment_id
 
 def parse_args(args: List[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Energy Efficiency runner")
-    parser.add_argument(
-        "--target",
-        choices=["heating", "cooling", "both"],
-        default="both",
-        help="Selecciona el objetivo a modelar",
-    )
-    parser.add_argument(
-        "--test_size",
-        type=float,
-        default=DEFAULT_TEST_SIZE,
-        help="Proporción del conjunto de prueba",
-    )
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--target", choices=["heating", "cooling", "both"], default="both")
+    parser.add_argument("--test_size", type=float, default=DEFAULT_TEST_SIZE)
     return parser.parse_args(args)
 
 def main(argv: List[str] | None = None) -> int:
     args = parse_args(argv or [])
-    if not 0 < args.test_size < 1:
-        raise ValueError("--test_size debe estar en el rango (0,1)")
     base_dir = Path(__file__).resolve().parent
     project_root = base_dir.parent
     csv_path = base_dir / "results_metrics.csv"
     html_path = base_dir / "index.html"
-    csv_path.parent.mkdir(parents=True, exist_ok=True)
-    # Cargar dataset
     dataset_paths = [
         project_root / "data" / "energy_efficiency_modified.csv",
         project_root / "data" / "processed" / "energy_efficiency_modified.csv",
@@ -393,113 +221,68 @@ def main(argv: List[str] | None = None) -> int:
     ]
     df = load_data(dataset_paths)
     target_candidates = detect_targets(df)
-    # Seleccionar columnas objetivo según el parámetro
+
     if args.target == "heating":
         selected_targets = [target_candidates[0]]
     elif args.target == "cooling":
         selected_targets = [target_candidates[1]]
     else:
         selected_targets = target_candidates
-    # Convertir objetivos a numérico y filtrar filas válidas (sin NaN en objetivos)
-    df_targets = df[selected_targets].apply(pd.to_numeric, errors="coerce")
-    df_targets = df_targets.replace([np.inf, -np.inf], np.nan)
-    valid_rows = df_targets.notna().all(axis=1)
-    df_targets = df_targets.loc[valid_rows]
-    # Preparar X (características), convertir a numérico y filtrar filas válidas
-    X = df.drop(columns=selected_targets).apply(pd.to_numeric, errors="coerce")
-    X = X.replace([np.inf, -np.inf], np.nan)
-    X = X.loc[valid_rows]
-    # Eliminar columnas de características que estén totalmente vacías
-    X = X.dropna(axis=1, how="all")
-    if X.empty or not X.columns.any():
-        raise ValueError("No hay características numéricas disponibles para el modelado")
+
+    X = df.drop(columns=selected_targets)
+    y = df[selected_targets]
+
+    X = X.apply(pd.to_numeric, errors="coerce").replace([np.inf, -np.inf], np.nan)
+    y = y.apply(pd.to_numeric, errors="coerce").replace([np.inf, -np.inf], np.nan)
+
+    Xy = pd.concat([X, y], axis=1).dropna()
+    X = Xy[X.columns]
+    y = Xy[y.columns]
+
     feature_names = X.columns.tolist()
-    if len(X) == 0:
-        raise ValueError("No hay filas disponibles tras limpiar los datos")
-    # Separar en entrenamiento y prueba
-    X_train, X_test, y_train, y_test = train_test_split(
-        X,
-        df_targets,
-        test_size=args.test_size,
-        random_state=DEFAULT_SEED,
-    )
-    if X_train.empty or X_test.empty:
-        raise ValueError("El conjunto de entrenamiento o prueba está vacío después del split")
-    # Verificar columnas válidas en entrenamiento (con al menos un valor no nulo)
-    valid_train_columns = X_train.columns[X_train.notna().any(axis=0)]
-    if valid_train_columns.empty:
-        raise ValueError(
-            "No hay características válidas en el conjunto de entrenamiento tras la limpieza"
-        )
-    # Si hubo columnas eliminadas por estar vacías en entrenamiento, reflejarlo en X, X_test
-    if len(valid_train_columns) != len(feature_names):
-        X_train = X_train[valid_train_columns].copy()
-        X_test = X_test[valid_train_columns].copy()
-        X = X[valid_train_columns].copy()
-        feature_names = list(valid_train_columns)
-    # Construir preprocesador y pipelines de modelos
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=args.test_size, random_state=DEFAULT_SEED)
+
     preprocessor = build_preprocessor(feature_names)
-    model_specs = models_zoo(seed=DEFAULT_SEED)
-    evaluation_records = []
+    model_specs = models_zoo()
+    results = []
+
     for spec in model_specs:
         pipeline = build_pipeline(preprocessor, spec.estimator)
-        # Evaluar modelo (entrenamiento, holdout y CV)
-        fitted_pipeline, holdout_metrics, cv_metrics = evaluate_model(
-            spec.name,
-            pipeline,
-            X_train,
-            X_test,
-            y_train,
-            y_test,
-            cv_splits=5,
-        )
-        evaluation_records.append(
-            {
-                "name": spec.name,
-                "pipeline": fitted_pipeline,
-                "holdout_metrics": holdout_metrics,
-                "cv_metrics": cv_metrics,
-                "params": spec.params,
-            }
-        )
-    # Compilar métricas en DataFrame y escribir dashboard
-    metrics_rows = [
-        {
-            "Model": record["name"],
-            "R2": record["holdout_metrics"]["R2"],
-            "MAE": record["holdout_metrics"]["MAE"],
-            "RMSE": record["holdout_metrics"]["RMSE"],
-        }
-        for record in evaluation_records
-    ]
-    metrics_df = pd.DataFrame(metrics_rows)
+        fitted, holdout, cv = evaluate_model(spec.name, pipeline, X_train, X_test, y_train, y_test, 5)
+        results.append({
+            "name": spec.name,
+            "pipeline": fitted,
+            "holdout_metrics": holdout,
+            "cv_metrics": cv,
+            "params": spec.params,
+        })
+
+    metrics_df = pd.DataFrame([{
+        "Model": r["name"],
+        "R2": r["holdout_metrics"]["R2"],
+        "MAE": r["holdout_metrics"]["MAE"],
+        "RMSE": r["holdout_metrics"]["RMSE"],
+    } for r in results])
+
     write_dashboard(metrics_df, csv_path, html_path)
-    # Imprimir resultados del holdout (redondeados)
+
     print("\nResultados de holdout:")
-    print(metrics_df.round({"R2": 3, "MAE": 3, "RMSE": 3}).to_string(index=False))
-    # Registrar cada corrida en MLflow
-    for record in evaluation_records:
-        run_id, experiment_id = log_mlflow_run(
-            model_name=record["name"],
-            pipeline=record["pipeline"],
-            holdout_metrics=record["holdout_metrics"],
-            cv_metrics=record["cv_metrics"],
-            params=record["params"],
-            feature_names=feature_names,
-            target_choice=selected_targets,
-            test_size=args.test_size,
-            seed=DEFAULT_SEED,
-            csv_path=csv_path,
-            html_path=html_path,
-            X_sample=X,
+    print(metrics_df.round(3).to_string(index=False))
+
+    for record in results:
+        run_id, exp_id = log_mlflow_run(
+            record["name"], record["pipeline"],
+            record["holdout_metrics"], record["cv_metrics"],
+            record["params"], feature_names,
+            selected_targets, args.test_size, DEFAULT_SEED,
+            csv_path, html_path, X
         )
-        print(f"Run ID: {run_id} | Experiment ID: {experiment_id}")
-    # Rutas de resultados
+        print(f"Run ID: {run_id} | Experiment ID: {exp_id}")
+
     print(f"CSV:  {csv_path.resolve()}")
     print(f"HTML: {html_path.resolve()}")
     print("MLflow UI: mlflow ui --port 5000")
-    print("Abre MLflow UI con: mlflow ui --port 5000")
     return 0
 
-if __name__ == "__main__":  # pragma: no cover
+if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))
