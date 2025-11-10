@@ -174,7 +174,11 @@ def main(target_choice="both", test_size=0.2):
     y = df[y_cols].copy()
     X = df[[c for c in df.columns if c not in y_cols]].copy()
 
-    preprocessor = build_preprocessor(X.columns)
+    # Mantén solo variables numéricas (evita 'mixed_type_col' con strings)
+    feature_cols = X.select_dtypes(include=[np.number]).columns
+    X = X[feature_cols]
+
+    preprocessor = build_preprocessor(feature_cols)
     models = models_zoo()
 
     kf = KFold(n_splits=5, shuffle=True, random_state=SEED)
