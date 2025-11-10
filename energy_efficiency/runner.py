@@ -14,7 +14,7 @@ Pipeline principal de experimentación para el proyecto de eficiencia energétic
 Probado con:
 Python 3.9.6 | scikit-learn 1.3.2 | pandas 2.2.2 | mlflow 2.14.1
 """
-
+from sklearn.impute import SimpleImputer
 import argparse
 from pathlib import Path
 
@@ -30,7 +30,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.model_selection import train_test_split, KFold, cross_val_score
-from sklearn.impute import SimpleImputer
+
 from sklearn.metrics import (
     r2_score,
     mean_absolute_error,
@@ -180,6 +180,9 @@ def main(target_choice="both", test_size=0.2):
     mask = ~y.isna().any(axis=1)
     X = X.loc[mask].reset_index(drop=True)
     y = y.loc[mask].reset_index(drop=True)
+
+    # Airbag por si algún NaN sobrevive (no debería, pero garantizamos)
+    X = X.fillna(X.median(numeric_only=True))
 
 
     if target_choice == "heating":
