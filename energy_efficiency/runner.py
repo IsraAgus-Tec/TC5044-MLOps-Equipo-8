@@ -1,4 +1,3 @@
-"""Runner script for Energy Efficiency project."""
 from __future__ import annotations
 
 import argparse
@@ -219,19 +218,17 @@ def main(argv: List[str] | None = None) -> int:
         project_root / "data" / "processed" / "energy_efficiency_modified.csv",
         project_root / "data" / "raw" / "energy_efficiency_modified.csv",
     ]
-    
+
     df = load_data(dataset_paths)
 
     # 🔒 Eliminar filas con cualquier valor NaN o infinito antes del procesamiento
-    df = df.apply(pd.to_numeric, errors='coerce')           # Forzar todos los datos a ser numéricos
-    df = df.replace([np.inf, -np.inf], np.nan)              # Reemplazar infinitos por NaN
-    df = df.dropna()                                        # Eliminar filas que contengan cualquier NaN
+    df = df.apply(pd.to_numeric, errors='coerce')
+    df = df.replace([np.inf, -np.inf], np.nan)
+    df = df.dropna()
     if df.empty:
         raise ValueError("El dataset quedó vacío tras eliminar NaNs. Verifica el archivo de entrada.")
 
-    # Continuar normalmente
     target_candidates = detect_targets(df)
-
 
     if args.target == "heating":
         selected_targets = [target_candidates[0]]
@@ -242,9 +239,6 @@ def main(argv: List[str] | None = None) -> int:
 
     X = df.drop(columns=selected_targets)
     y = df[selected_targets]
-
-    X = X.apply(pd.to_numeric, errors="coerce").replace([np.inf, -np.inf], np.nan)
-    y = y.apply(pd.to_numeric, errors="coerce").replace([np.inf, -np.inf], np.nan)
 
     Xy = pd.concat([X, y], axis=1).dropna()
     X = Xy[X.columns]
