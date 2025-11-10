@@ -1,0 +1,13 @@
+digest: 768455d7
+name: dataset
+profile: '{"num_rows": 496, "num_elements": 4960}'
+schema: '{"mlflow_colspec": [{"type": "double", "name": "X1", "required": false},
+  {"type": "double", "name": "X2", "required": false}, {"type": "double", "name":
+  "X3", "required": false}, {"type": "double", "name": "X4", "required": false}, {"type":
+  "double", "name": "X5", "required": false}, {"type": "double", "name": "X6", "required":
+  false}, {"type": "double", "name": "X7", "required": false}, {"type": "double",
+  "name": "X8", "required": false}, {"type": "double", "name": "Y2", "required": false},
+  {"type": "double", "name": "mixed_type_col", "required": false}]}'
+source: '{"tags": {"mlflow.user": "codespace", "mlflow.source.name": "/workspaces/TC5044-MLOps-Equipo-8/energy_efficiency/runner.py",
+  "mlflow.source.type": "LOCAL", "mlflow.source.git.commit": "f2e24b8c2284547ef545a243a5b2b4e533843a1b"}}'
+source_type: code
