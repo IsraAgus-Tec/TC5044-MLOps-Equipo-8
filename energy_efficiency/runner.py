@@ -26,12 +26,12 @@ warnings.filterwarnings("ignore")
 # -----------------------------
 # Reproducibilidad global
 # -----------------------------
-SEED = 42
-RANDOM_STATE = SEED
-
 import numpy as np
+import random
 
-np.random.seed(SEED)
+RANDOM_STATE = 42
+np.random.seed(RANDOM_STATE)
+random.seed(RANDOM_STATE)
 
 import pandas as pd
 import mlflow
@@ -122,22 +122,6 @@ def split_xy(df: pd.DataFrame, target_col: str):
     y = y.loc[mask_y].reset_index(drop=True)
     return X, y, target_col
 
-
-def build_preprocessor(feature_names):
-    numeric_features = list(feature_names)
-    numeric_transformer = Pipeline(
-        steps=[
-            ("imputer", SimpleImputer(strategy="median")),
-            ("scaler", StandardScaler()),
-        ]
-    )
-    preprocessor = ColumnTransformer(
-        transformers=[("num", numeric_transformer, numeric_features)],
-        remainder="drop",
-    )
-    return preprocessor
-
-
 def make_models():
     return {
         "LinearRegression": LinearRegression(),  # sin random_state
@@ -148,14 +132,57 @@ def make_models():
             learning_rate=0.1, max_depth=3, random_state=RANDOM_STATE
         ),
     }
+# --- Preprocesamiento ---
+from sklearn.preprocessing import StandardScaler
+from sklearn.impute import SimpleImputer
 
+# --- Modelos ---
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.pipeline import Pipeline
+
+def make_pipelines(X_df):
+    pre = build_preprocessor(X_df)
+
+    lr_pipe = Pipeline([
+        ("preprocessor", pre),
+        ("model", LinearRegression())
+    ])
+
+    rf_pipe = Pipeline([
+        ("preprocessor", pre),
+        ("model", RandomForestRegressor(
+            n_estimators=250,
+            max_depth=10,
+            min_samples_split=4,
+            min_samples_leaf=2,
+            random_state=RANDOM_STATE
+        ))
+    ])
+
+    gb_pipe = Pipeline([
+        ("preprocessor", pre),
+        ("model", GradientBoostingRegressor(
+            n_estimators=300,
+            learning_rate=0.08,
+            max_depth=4,
+            random_state=RANDOM_STATE
+        ))
+    ])
+
+    models = [
+        ("Linear Regression", lr_pipe),
+        ("Random Forest", rf_pipe),
+        ("Gradient Boosting", gb_pipe),
+    ]
+    return models
 
 # -----------------------------
 # Entrenamiento + logging
 # -----------------------------
 def evaluate_and_log(
     model_name: str,
-    pipeline: Pipeline,
+    model: Pipeline,
     X_train,
     X_test,
     y_train,
@@ -170,22 +197,22 @@ def evaluate_and_log(
 
     with mlflow.start_run(run_name=f"{model_name} | target={target_name}"):
         # Entrenamiento
-        pipeline.fit(X_train, y_train)
+        model.fit(X_train, y_train)
 
         # Holdout
-        y_pred = pipeline.predict(X_test)
+        y_pred = model.predict(X_test)
         r2 = float(r2_score(y_test, y_pred))
         mae = float(mean_absolute_error(y_test, y_pred))
         rmse = float(mean_squared_error(y_test, y_pred, squared=False))
 
         # Cross-Validation (en el set de entrenamiento)
         kf = KFold(n_splits=N_SPLITS, shuffle=True, random_state=RANDOM_STATE)
-        cv_r2 = cross_val_score(pipeline, X_train, y_train, scoring="r2", cv=kf)
+        cv_r2 = cross_val_score(model, X_train, y_train, scoring="r2", cv=kf)
         cv_mae = -cross_val_score(
-            pipeline, X_train, y_train, scoring="neg_mean_absolute_error", cv=kf
+            model, X_train, y_train, scoring="neg_mean_absolute_error", cv=kf
         )
         cv_rmse = -cross_val_score(
-            pipeline, X_train, y_train, scoring="neg_root_mean_squared_error", cv=kf
+            model, X_train, y_train, scoring="neg_root_mean_squared_error", cv=kf
         )
 
         # Tags y métricas
@@ -210,6 +237,7 @@ def evaluate_and_log(
                 "cv_rmse_std": float(np.std(cv_rmse)),
             }
         )
+        mlflow.sklearn.log_model(model, f"{model_name}_{target_name}")
 
         # (Autolog ya registra el modelo y los parámetros del estimador)
 
@@ -230,19 +258,18 @@ def run_for_target(df: pd.DataFrame, target_code: str, test_size: float) -> pd.D
 
     # Split reproducible
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=test_size, shuffle=True, random_state=SEED
+        X, y, test_size=test_size, random_state=RANDOM_STATE
     )
 
-    pre = build_preprocessor(X.columns)
-    models = make_models()
+    # Construir los pipelines con el preprocesador interno
+    models = make_pipelines(X)  # <- regresa una lista de (name, pipeline)
 
     rows = []
-    for name, model in models.items():
-        pipe = Pipeline([("prep", pre), ("model", model)])
-        metrics = evaluate_and_log(name, pipe, X_train, X_test, y_train, y_test, target_name)
+    for name, model in models:   # <- SIN .items()
+        metrics = evaluate_and_log(name, model, X_train, X_test, y_train, y_test, target_name)
         rows.append(metrics)
 
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows))
 
 
 def save_results(df_results: pd.DataFrame, out_dir: Path):
@@ -288,6 +315,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Runner de experimentos – Energy Efficiency")
     parser.add_argument("--target", type=str, default="both", help="y1 | y2 | both")
     parser.add_argument("--data", type=str, default=DEFAULT_DATA, help="Ruta al CSV de datos")
-    parser.add_argument("--test_size", type=float, default=TEST_SIZE, help="Proporción del test split")
+    parser.add_argument("--test_size", type=float, default=0.2, help="Proporción del test split (por defecto 20%)")
     args = parser.parse_args()
     main(target_choice=args.target, data_path=args.data, test_size=args.test_size)
