@@ -58,7 +58,7 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 
 # Dataset por default (ajústalo si lo necesitas)
-DEFAULT_DATA = (REPO / "src" / "data" / "energy_efficiency_modified.csv").as_posix()
+DEFAULT_DATA = (REPO / "data" / "energy_efficiency_final.csv").as_posix()
 
 # Carpeta de salida
 OUT_DIR = REPO / "src" / "notebooks"
@@ -86,6 +86,14 @@ def load_dataset(path: str | Path) -> pd.DataFrame:
     df = pd.read_csv(path)
     # Sanitizar infinitos
     df = df.replace([np.inf, -np.inf], np.nan)
+    # Eliminar columnas no relevantes
+    drop_cols = [c for c in df.columns if "mixed" in c.lower()]
+    if drop_cols:
+        print(f"[INFO] Columnas eliminadas: {drop_cols}")
+        df = df.drop(columns=drop_cols)
+
+
+
     return df
 
 
@@ -140,6 +148,21 @@ from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.pipeline import Pipeline
+
+def build_preprocessor(X_df):
+    # Tomamos solo columnas numéricas
+    numeric_features = [c for c in X_df.columns if np.issubdtype(X_df[c].dtype, np.number)]
+
+    numeric_transformer = Pipeline(steps=[
+        ("imputer", SimpleImputer(strategy="median")),
+        ("scaler", StandardScaler()),
+    ])
+
+    pre = ColumnTransformer(
+        transformers=[("num", numeric_transformer, numeric_features)],
+        remainder="drop",
+    )
+    return pre
 
 def make_pipelines(X_df):
     pre = build_preprocessor(X_df)
@@ -269,7 +292,7 @@ def run_for_target(df: pd.DataFrame, target_code: str, test_size: float) -> pd.D
         metrics = evaluate_and_log(name, model, X_train, X_test, y_train, y_test, target_name)
         rows.append(metrics)
 
-    return pd.DataFrame(rows))
+    return pd.DataFrame(rows)
 
 
 def save_results(df_results: pd.DataFrame, out_dir: Path):
