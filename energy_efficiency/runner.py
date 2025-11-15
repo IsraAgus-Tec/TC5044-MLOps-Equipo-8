@@ -18,11 +18,12 @@ Python 3.11+ | scikit-learn 1.3–1.7 | pandas 2.2–2.3 | mlflow 2.14+
 from __future__ import annotations
 
 import argparse
+import traceback
 from pathlib import Path
 import warnings
 
 warnings.filterwarnings("ignore")
-
+$
 # -----------------------------
 # Reproducibilidad global
 # -----------------------------
@@ -73,6 +74,16 @@ EXPERIMENT_NAME = "Energy Efficiency – Ricardo Aguilar"
 N_SPLITS = 5
 TEST_SIZE = 0.2
 
+mlflow.set_experiment(EXPERIMENT_NAME)
+
+# MLflow -> URI ABSOLUTA al 'mlruns' del repo (no depende del CWD)
+MLRUNS_DIR = REPO / "mlruns"
+MLRUNS_DIR.mkdir(parents=True, exist_ok=True)
+TRACKING_URI = f"file://{MLRUNS_DIR.as_posix()}"
+EXPERIMENT_NAME = "Energy Efficiency – Ricardo Aguilar"
+
+# Inicializa MLflow una sola vez
+mlflow.set_tracking_uri(TRACKING_URI)
 mlflow.set_experiment(EXPERIMENT_NAME)
 
 
