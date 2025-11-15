@@ -1,0 +1,15 @@
+artifact_uri: file:///workspaces/TC5044-MLOps-Equipo-8/mlruns/393098293382513076/7a6bf70fa6764d9fbbf2f12632fe23de/artifacts
+end_time: 1762817650344
+entry_point_name: ''
+experiment_id: '393098293382513076'
+lifecycle_stage: active
+run_id: 7a6bf70fa6764d9fbbf2f12632fe23de
+run_name: GradientBoosting | target=Y2
+run_uuid: 7a6bf70fa6764d9fbbf2f12632fe23de
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1762817617303
+status: 3
+tags: []
+user_id: codespace
