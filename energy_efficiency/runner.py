@@ -23,7 +23,6 @@ from pathlib import Path
 import warnings
 
 warnings.filterwarnings("ignore")
-$
 # -----------------------------
 # Reproducibilidad global
 # -----------------------------
@@ -235,10 +234,14 @@ def evaluate_and_log(
 
         # Holdout
         y_pred = model.predict(X_test)
-        r2 = float(r2_score(y_test, y_pred))
+        # --- Métricas ---
+        # 1) calculamos MSE normal
+        mse = float(mean_squared_error(y_test, y_pred))
+        # 2) RMSE es la raíz cuadrada del MSE
+        rmse = float(np.sqrt(mse))
         mae = float(mean_absolute_error(y_test, y_pred))
-        rmse = float(mean_squared_error(y_test, y_pred, squared=False))
-
+        r2 = float(r2_score(y_test, y_pred))
+        
         # Cross-Validation (en el set de entrenamiento)
         kf = KFold(n_splits=N_SPLITS, shuffle=True, random_state=RANDOM_STATE)
         cv_r2 = cross_val_score(model, X_train, y_train, scoring="r2", cv=kf)
