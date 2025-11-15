@@ -10,40 +10,35 @@ Esta documentación sirve como referencia oficial del trabajo de modelado, evalu
 
 La Fase 2 redefine la estructura del repositorio para alinearse con prácticas reales de MLOps:
 
+
+La Fase 2 redefinió la estructura del repositorio alineándose con prácticas reales de MLOps:
+
 TC5044-MLOps-Equipo-8/
-├── data/
-│ ├── raw/ # Dataset original (no modificado)
-│ ├── processed/ # Datasets limpios y estandarizados
-│ │ ├── energy_efficiency_clean.csv
-│ │ └── energy_efficiency_modified.csv
-│ └── energy_efficiency_final.csv # Dataset final usado por runner.py
+│── data/
+│   ├── raw/                          # Dataset original sin modificar
+│   ├── processed/                    # Datasets limpios y estandarizados
+│   │   ├── energy_efficiency_clean.csv
+│   │   ├── energy_efficiency_modified.csv
+│   │   └── energy_efficiency_final.csv   # Dataset final usado por runner.py
 │
-├── energy_efficiency/
-│ ├── runner.py # Pipeline principal (holdout + CV + MLflow)
-│ ├── init.py
-│ └── modeling/ # Template original del curso (preservado)
-│ ├── config.py
-│ ├── dataset.py
-│ ├── features.py
-│ ├── train.py
-│ ├── predict.py
-│ └── run_experiments.py
+│── energy_efficiency/
+│   ├── __init__.py
+│   └── runner.py                     # Pipeline principal (holdout + CV + MLflow)
 │
-├── src/
-│ ├── notebooks/
-│ │ ├── results_metrics.csv
-│ │ ├── results_metrics.html
-│ │ └── mlflow_evidence/ # Evidencia mínima exportada de MLflow
-│ │ ├── datasets/
-│ │ ├── model_artifact/
-│ │ ├── estimator.html
-│ │ ├── run_meta.yaml
-│ │ └── README.md
-│ └── README.md
+│── src/
+│   ├── data/cleansed/                # Evidencia mínima requerida por el curso
+│   ├── handlers/                     # Módulos internos auxiliarles
+│   ├── notebooks/
+│   │   ├── mlflow_evidence/          # Evidencia reducida de MLflow
+│   │   ├── results_metrics.csv
+│   │   └── results_metrics.html
+│   └── notebooks/src/                # Resultados adicionales
 │
-├── requirements.txt
-├── README.md # README principal original del repo
-└── README_Fase2.md # Documento actual (Fase 2)
+│── mlruns/                           # Tracking local (no se sube al repo)
+│── README.md                         # README principal del repositorio
+│── README_Fase2.md                   # Documento oficial de entrega Fase 2
+│── requirements.txt
+
 
 Esta estructura separa claramente:
 
