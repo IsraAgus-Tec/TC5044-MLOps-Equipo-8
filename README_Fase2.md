@@ -48,7 +48,8 @@ Esta estructura separa claramente:
 - **Template de modelado de la materia (preservado)**  
 - **Datos en carpetas raw/processed/final**  
 - **Evidencia ligera y versionable de MLflow**  
-- **Métricas estáticas exportadas para revisión académica**  
+- **Métricas estáticas exportadas para revisión académica**
+
 ## 3. Pipeline Principal (`energy_efficiency/runner.py`)
 
 La Fase 2 implementa un pipeline completo con `scikit-learn` y MLflow:
