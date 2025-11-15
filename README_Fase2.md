@@ -13,31 +13,33 @@ La Fase 2 redefine la estructura del repositorio para alinearse con prácticas r
 
 La Fase 2 redefinió la estructura del repositorio alineándose con prácticas reales de MLOps:
 
+```text
 TC5044-MLOps-Equipo-8/
-│── data/
-│   ├── raw/                          # Dataset original sin modificar
-│   ├── processed/                    # Datasets limpios y estandarizados
-│   │   ├── energy_efficiency_clean.csv
-│   │   ├── energy_efficiency_modified.csv
-│   │   └── energy_efficiency_final.csv   # Dataset final usado por runner.py
+├── data/
+│   ├── raw/                         # Dataset original sin modificar
+│   └── processed/                   # Datasets limpios y estandarizados
+│       ├── energy_efficiency_clean.csv
+│       ├── energy_efficiency_modified.csv
+│       └── energy_efficiency_final.csv   # Dataset final usado por runner.py
 │
-│── energy_efficiency/
+├── energy_efficiency/
 │   ├── __init__.py
-│   └── runner.py                     # Pipeline principal (holdout + CV + MLflow)
+│   └── runner.py                    # Pipeline principal (holdout + CV + MLflow)
 │
-│── src/
-│   ├── data/cleansed/                # Evidencia mínima requerida por el curso
-│   ├── handlers/                     # Módulos internos auxiliarles
-│   ├── notebooks/
-│   │   ├── mlflow_evidence/          # Evidencia reducida de MLflow
-│   │   ├── results_metrics.csv
-│   │   └── results_metrics.html
-│   └── notebooks/src/                # Resultados adicionales
+├── src/
+│   ├── data/cleansed/               # Evidencia mínima requerida por el curso
+│   ├── handlers/                    # Módulos internos auxiliares
+│   └── notebooks/
+│       ├── mlflow_evidence/         # Evidencia reducida de MLflow
+│       │   ├── results_metrics.csv
+│       │   └── results_metrics.html
+│       └── notebooks/src/           # Resultados adicionales
 │
-│── mlruns/                           # Tracking local (no se sube al repo)
-│── README.md                         # README principal del repositorio
-│── README_Fase2.md                   # Documento oficial de entrega Fase 2
-│── requirements.txt
+├── mlruns/                          # Tracking local (no se sube al repo)
+├── README.md                        # README principal del repositorio
+├── README_Fase2.md                  # Documento oficial de entrega Fase 2
+└── requirements.txt
+
 
 
 Esta estructura separa claramente:
@@ -305,9 +307,10 @@ Energy Efficiency
 
 Este nombre aparece en los metadatos y en los registros de MLflow.
 
-## 8. Conclusiones y Trabajo Futuro
+##8. Conclusiones y Trabajo Futuro
+---
 
-### 8.1. Conclusiones
+8.1. Conclusiones
 
 El desarrollo del pipeline permitió construir un flujo completo de experimentación para el análisis de eficiencia energética, alineado con prácticas modernas de MLOps. Entre los puntos más relevantes destacan:
 
@@ -318,7 +321,7 @@ El desarrollo del pipeline permitió construir un flujo completo de experimentac
 
 El modelo de Gradient Boosting mostró el mejor desempeño para Y1 mientras que Random Forest entregó resultados competitivos. En Y2, aunque el holdout del Gradient Boosting fue negativo, la validación cruzada mostró estabilidad, indicando sensibilidad a la partición y la necesidad de seguir ajustando hiperparámetros.
 
-### 8.2. Trabajo Futuro (Fase 3)
+8.2. Trabajo Futuro (Fase 3)
 
 Para la siguiente etapa, se propone continuar con las siguientes mejoras:
 
