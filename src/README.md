@@ -59,3 +59,24 @@ Su organización permite:
 - trazabilidad,
 - y soporte claro para la futura Fase 3. 
 
+## Contribución – Modeling & Engineering Lead (Sebastián)
+
+- Implementación del pipeline de entrenamiento en `handlers/model_trainer.py`, incluyendo:
+  - Preprocesamiento automático (conversión a numérico, imputación por mediana y estandarización).
+  - Entrenamiento de tres modelos: LinearRegression, RandomForest y GradientBoosting como problema de regresión multi-salida (heating_load y cooling_load).
+  - Validación cruzada (5-fold CV) con métricas R², RMSE y MAE.
+
+- Integración del pipeline completo en `src/main.py`, conectando:
+  - Carga de datos originales.
+  - Limpieza y tratamiento de outliers.
+  - Versión de dataset limpio con DVC en `src/data/cleansed/energy_efficiency_modified.csv`.
+  - Entrenamiento y evaluación de modelos.
+
+- Pruebas automatizadas con `pytest` para asegurar la estabilidad del sistema:
+  - Tests unitarios de `DataLoader`, `DataPreprocessor` y `ModelTrainer`.
+  - Test de integración del pipeline end-to-end (`test_pipeline_integration.py`).
+  - Tests de reproducibilidad del modelo (`test_reproducibility.py`) controlando semillas aleatorias.
+
+- Versionado:
+  - Datos versionados con DVC y remoto configurado en S3 (`s3://itesm-mna/202502-equipo8/dvc`).
+  - Evidencia de versionado de modelos con MLflow en `src/notebooks/mlflow_evidence`.
