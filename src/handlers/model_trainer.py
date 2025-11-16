@@ -8,27 +8,20 @@ from sklearn.model_selection import cross_validate, train_test_split
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer, StandardScaler
-import random
-import numpy as np
-from src.config import RANDOM_STATE, TEST_SIZE, TARGET_COLS
+
 
 class ModelTrainer:
     def __init__(
         self,
         df,
-        target_cols=TARGET_COLS,
-        test_size=TEST_SIZE,
-        random_state=RANDOM_STATE,
+        target_cols=["heating_load", "cooling_load"],
+        test_size=0.2,
+        random_state=42,
     ):
         self.df = df.copy()
         self.target_cols = target_cols
         self.test_size = test_size
         self.random_state = random_state
-
-        # 🔐 Fijar semillas para reproducibilidad
-        random.seed(self.random_state)
-        np.random.seed(self.random_state)
-
         self.X_train = self.X_test = self.Y_train = self.Y_test = None
         self.feature_cols = [col for col in self.df.columns if col not in self.target_cols]
         self.models = {}
@@ -43,25 +36,14 @@ class ModelTrainer:
             print(f"- {name}")
 
     def split_data(self):
-         
         """
         Split the dataset into training and testing sets.
-        Además, asegura que las columnas objetivo sean numéricas y sin NaNs,
-        para evitar errores en entrenamiento / reproducibilidad.
         """
         X = self.df[self.feature_cols]
-
-        # Aseguramos que las columnas objetivo sean numéricas
-        Y = self.df[self.target_cols].apply(pd.to_numeric, errors="coerce")
-
-        # Si hay NaNs (por valores no convertibles o faltantes), los imputamos con la mediana
-        if Y.isna().any().any():
-            Y = Y.fillna(Y.median())
-
+        Y = self.df[self.target_cols]
         self.X_train, self.X_test, self.Y_train, self.Y_test = train_test_split(
             X, Y, test_size=self.test_size, random_state=self.random_state
         )
-
         print(
             f"Dataset split completed -> train: {self.X_train.shape[0]} rows | "
             f"test: {self.X_test.shape[0]} rows"
