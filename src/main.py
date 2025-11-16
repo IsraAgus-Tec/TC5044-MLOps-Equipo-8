@@ -6,6 +6,8 @@ import json
 
 import pandas as pd
 from joblib import dump
+import mlflow
+import mlflow.sklearn
 
 try:
     from handlers.model_evaluator import ModelEvaluator
@@ -27,6 +29,11 @@ DEFAULT_FIGURES_DIR = Path("reports/figures")
 DEFAULT_MODEL_PATH = Path("models/energy_efficiency_rf.joblib")
 DEFAULT_MODEL_METADATA = DEFAULT_MODEL_PATH.with_suffix(".json")
 CLEANSED_FILENAME = "energy_efficiency_modified.csv"
+MLFLOW_TRACKING_URI = f"file:{(Path('mlruns').resolve())}"
+MLFLOW_EXPERIMENT = "EnergyEfficiency-CDS"
+
+mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+mlflow.set_experiment(MLFLOW_EXPERIMENT)
 
 
 def _save_metrics(results_df, output_dir: str | Path):
@@ -57,7 +64,18 @@ def _select_best_model(models: dict, validation_reports: dict) -> tuple[str, obj
     return best_name, models[best_name]
 
 
-def _export_model(model, model_name: str, feature_cols, model_path: Path, metadata_path: Path):
+def _log_model_to_mlflow(model_name: str, model, model_path: Path, metadata_path: Path, metrics: dict | None):
+    with mlflow.start_run(run_name=f"{model_name}-export", nested=False):
+        mlflow.log_param("model_name", model_name)
+        mlflow.log_param("artifact_path", str(model_path))
+        if metrics:
+            mlflow.log_metrics({f"cv_{k}": float(v) for k, v in metrics.items()})
+        mlflow.sklearn.log_model(model, artifact_path="model")
+        mlflow.log_artifact(str(model_path), artifact_path="serialized")
+        mlflow.log_artifact(str(metadata_path), artifact_path="serialized")
+
+
+def _export_model(model, model_name: str, feature_cols, model_path: Path, metadata_path: Path, metrics: dict | None):
     model_path = Path(model_path)
     metadata_path = Path(metadata_path)
     model_path.parent.mkdir(parents=True, exist_ok=True)
@@ -70,6 +88,7 @@ def _export_model(model, model_name: str, feature_cols, model_path: Path, metada
     }
     metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     print(f"\n\n > Model '{model_name}' exported to {model_path}\n")
+    _log_model_to_mlflow(model_name, model, model_path, metadata_path, metrics)
 
 
 def main(
@@ -153,6 +172,7 @@ def main(
             trainer.feature_cols,
             model_path,
             model_metadata_path,
+            trainer.validation_reports.get(best_name),
         )
 
     return results_df

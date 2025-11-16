@@ -46,6 +46,8 @@ El pipeline exporta imágenes antes y después de la limpieza a `reports/figures
 
 Usa `--figures-dir` o `--skip-figures` en `python -m src.main` para personalizar esta salida.
 
+Consulta `docs/REPRODUCIBILITY.md` para el checklist completo de ejecución en un entorno limpio, comparación de métricas y verificación del servicio FastAPI.
+
 ## Modelo serializado y servicio FastAPI
 
 - Artefacto por defecto: `models/energy_efficiency_rf.joblib`
