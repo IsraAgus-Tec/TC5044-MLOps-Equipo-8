@@ -2,7 +2,8 @@
 import sys
 from pathlib import Path
 
-SRC_DIR = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+SRC_DIR = PROJECT_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
@@ -12,7 +13,7 @@ from handlers.data_preprocessor import DataPreprocessor
 
 def _load_raw_df():
     loader = DataLoader()
-    return loader.getDataFrameFromFile("data/energy_efficiency_modified.csv")
+    return loader.getDataFrameFromFile("data/interim/energy_efficiency_modified.csv")
 
 
 def test_preprocessor_convert_numeric_and_impute():

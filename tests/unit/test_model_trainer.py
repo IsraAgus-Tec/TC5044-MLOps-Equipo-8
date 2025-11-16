@@ -2,7 +2,8 @@
 import sys
 from pathlib import Path
 
-SRC_DIR = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+SRC_DIR = PROJECT_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
@@ -13,7 +14,7 @@ from handlers.model_trainer import ModelTrainer
 
 def _get_cleansed_df():
     loader = DataLoader()
-    df = loader.getDataFrameFromFile("data/energy_efficiency_modified.csv")
+    df = loader.getDataFrameFromFile("data/interim/energy_efficiency_modified.csv")
     preprocessor = DataPreprocessor(df)
     preprocessor.convert_numeric()
     preprocessor.impute_missing()

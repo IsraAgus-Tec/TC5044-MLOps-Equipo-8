@@ -212,3 +212,6 @@ __marimo__/
 # Data
 *.csv .venv311/
 mlruns/
+
+#Mac
+.DS_Store

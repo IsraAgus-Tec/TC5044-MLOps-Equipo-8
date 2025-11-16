@@ -1,26 +1,29 @@
 # Carpeta `src/`
 
-La carpeta `src/` contiene el código fuente y los resultados estáticos generados por el pipeline del proyecto de eficiencia energética.
+La raíz del repositorio sigue la convención de Cookiecutter Data Science (`data/`, `notebooks/`, `models/`, `reports/`, etc.).  
+Esta carpeta se enfoca únicamente en el código Python del proyecto.
 
 ## Estructura General
 
-- `src/data/`  
-  Reservado para scripts de manejo de datos en Fase 3 (validaciones, utilidades y extracción automatizada).
+- `handlers/`  
+  Módulos reutilizables para carga de datos, preprocesamiento, entrenamiento y evaluación.
 
-- `src/handlers/`  
-  Espacio para módulos auxiliares como manejo de rutas, configuración o utilidades.  
-  Se puede aprovechar en Fase 3 según necesidades de orquestación.
+- `energy_efficiency/`  
+  Contiene el runner principal (`runner.py`) y el submódulo `modeling/` del template de la materia.
 
-- `src/notebooks/`  
-  Carpeta principal de resultados:
-  - `results_metrics.csv`
-  - `results_metrics.html`
-  - `mlflow_evidence/` → Evidencia exportada de MLflow (datasets, artefactos del modelo, estimator, metadata y README específico).
-## Relación con el pipeline principal (`runner.py`)
+- `config.py`  
+  Parámetros globales compartidos entre pruebas y pipelines.
+
+- `main.py`  
+  Punto de entrada para ejecutar el pipeline orquestado con los handlers.
+
+- `tests/`  
+  Se reubicaron en `tests/unit/` dentro de la raíz para alinear el layout con Cookiecutter; se conservan aquí únicamente las dependencias de código.
+## Relación con el pipeline principal (`src/main.py`)
 
 El pipeline principal del proyecto vive en:
 
-energy_efficiency/runner.py
+`src/main.py`
 
 Este script ejecuta:
 
@@ -47,11 +50,13 @@ Este script ejecuta:
    - artefactos,
    - modelo serializado.
 
-6. **Exportación de resultados** a: src/notebooks/results_metrics.csv
-src/notebooks/results_metrics.html ## Propósito de la carpeta `src/`
+6. **Exportación de resultados** a: `notebooks/results_metrics.csv`
+`notebooks/results_metrics.html`
+
+## Propósito de la carpeta `src/`
 
 Esta carpeta actúa como puente entre:
-- el código de modelado (`energy_efficiency/runner.py` y `modeling/`)
+- el código de modelado (`src/main.py`, `handlers/`)
 - y los resultados/evidencias requeridas por la Fase 2 del proyecto.
 
 Su organización permite:
@@ -69,7 +74,7 @@ Su organización permite:
 - Integración del pipeline completo en `src/main.py`, conectando:
   - Carga de datos originales.
   - Limpieza y tratamiento de outliers.
-  - Versión de dataset limpio con DVC en `src/data/cleansed/energy_efficiency_modified.csv`.
+  - Versión de dataset limpio con DVC en `data/interim/cleansed/energy_efficiency_modified.csv`.
   - Entrenamiento y evaluación de modelos.
 
 - Pruebas automatizadas con `pytest` para asegurar la estabilidad del sistema:
@@ -79,4 +84,4 @@ Su organización permite:
 
 - Versionado:
   - Datos versionados con DVC y remoto configurado en S3 (`s3://itesm-mna/202502-equipo8/dvc`).
-  - Evidencia de versionado de modelos con MLflow en `src/notebooks/mlflow_evidence`.
+  - Evidencia de versionado de modelos con MLflow en `notebooks/mlflow_evidence`.
