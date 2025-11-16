@@ -1,6 +1,7 @@
 import pandas as pd
 from pathlib import Path
 import subprocess
+import shutil
 
 
 class DataLoader:
@@ -18,43 +19,40 @@ class DataLoader:
     }
 
     def getBaseDir(self):
-        """
-        Get the base directory path for the current file.
-        
-        Returns the parent directory of the current file as a Path object.
-        """
         return Path(__file__).resolve().parent
 
+    def get_repo_root(self) -> Path:
+        # handlers/ -> src/ -> repo root
+        return self.getBaseDir().parents[1]
+
     def getDataFrameFromFile(self, route_to_file: str):
-        """
-        Load a CSV file and return a pandas DataFrame with renamed columns.
-        
-        Keyword arguments:
-        route_to_file -- relative path to the CSV file from the base directory
-        
-        Returns a DataFrame with columns renamed according to NAMING_MAP.
-        """
         file_path = self.getBaseDir().parent / route_to_file
         df = pd.read_csv(file_path)
         print(f"\nSuccesfully loaded DF from {file_path}...", "\n")
         return df.rename(columns=self.NAMING_MAP, inplace=False)
 
     def saveDataFrameAsFileWithDVC(self, df: pd.DataFrame, route: str, file_name: str):
-        """
-        Save a DataFrame to CSV file and add it to DVC version control.
-        
-        Keyword arguments:
-        df -- pandas DataFrame to save
-        route -- directory path where to save the file
-        file_name -- name of the CSV file to create
-        
-        Creates the directory if it doesn't exist and adds the file to DVC tracking.
-        """
         folder_path = self.getBaseDir().parent / route
         folder_path.mkdir(parents=True, exist_ok=True)
         file_path = folder_path / file_name
+
         df.to_csv(file_path, index=False)
         print(f"\nSuccesfully saved DF in {file_path}...", "\n")
 
         print("\nInitializing DVC versioning...", "\n")
-        subprocess.run(["dvc", "add", str(file_path)], check=True)
+
+        repo_root = self.get_repo_root()
+
+        # Solo intentamos usar DVC si está instalado y el repo tiene .dvc
+        if shutil.which("dvc") and (repo_root / ".dvc").exists():
+            try:
+                subprocess.run(
+                    ["dvc", "add", str(file_path.relative_to(repo_root))],
+                    cwd=repo_root,
+                    check=True,
+                )
+                print("File successfully tracked with DVC.\n")
+            except subprocess.CalledProcessError as e:
+                print(f"Warning: DVC tracking failed: {e}\n")
+        else:
+            print("DVC not available or repo not initialized, skipping DVC tracking.\n")
