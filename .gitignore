@@ -213,5 +213,10 @@ __marimo__/
 *.csv .venv311/
 mlruns/
 
+# Model artifacts
+models/*.joblib
+models/*.pkl
+models/*.json
+
 #Mac
 .DS_Store

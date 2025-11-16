@@ -6,3 +6,6 @@ scikit-learn==1.7.2
 dvc==3.63.0
 pytest>=8.0.0
 mlflow-skinny==2.14.1
+fastapi==0.115.5
+uvicorn[standard]==0.30.6
+pydantic==2.9.2

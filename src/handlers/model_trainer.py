@@ -10,6 +10,10 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer, StandardScaler
 
 
+def _cast_features_to_numeric(data):
+    return data.apply(pd.to_numeric, errors="coerce")
+
+
 class ModelTrainer:
     def __init__(
         self,
@@ -62,10 +66,7 @@ class ModelTrainer:
             steps=[
                 (
                     "cast_to_float",
-                    FunctionTransformer(
-                        lambda data: data.apply(pd.to_numeric, errors="coerce"),
-                        validate=False,
-                    ),
+                    FunctionTransformer(_cast_features_to_numeric, validate=False),
                 ),
                 ("imputer", SimpleImputer(strategy="median")),
                 ("scaler", StandardScaler()),
