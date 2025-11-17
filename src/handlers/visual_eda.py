@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -18,18 +20,31 @@ class VisualEDA:
         print(f"\n\tMissing values:", "\n")
         print(self.df.isna().sum(), "\n")
 
-    def plot_histograms(self):
+    @staticmethod
+    def _finalize_plot(fig, save_path: Path | None, show: bool):
+        if save_path:
+            save_path = Path(save_path)
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+            fig.savefig(save_path, bbox_inches="tight")
+            print(f"   -> Figura exportada en {save_path}")
+        if show:
+            plt.show()
+        else:
+            plt.close(fig)
+
+    def plot_histograms(self, save_path: Path | None = None, show: bool = False):
         """
-        Generate and display histograms for all numeric columns in the DataFrame.
+        Generate and optionally save histograms for all numeric columns in the DataFrame.
         """
         print(f"\nPlotting histograms...", "\n")
         numeric_cols = self.df.select_dtypes(include="number").columns
         self.df[numeric_cols].hist(bins=15, figsize=(15, 10))
         plt.suptitle("Histogramas de variables numéricas", fontsize=16)
         plt.tight_layout()
-        plt.show()
+        fig = plt.gcf()
+        self._finalize_plot(fig, save_path, show)
 
-    def plot_boxplots(self):
+    def plot_boxplots(self, save_path: Path | None = None, show: bool = False):
         """
         Create boxplots for all numeric columns to visualize distributions and outliers.
         """
@@ -44,17 +59,18 @@ class VisualEDA:
             axes[i].set_title(col)
         for j in range(i + 1, len(axes)):
             fig.delaxes(axes[j])
-            plt.suptitle("Boxplots de variables numéricas", fontsize=16)
+        plt.suptitle("Boxplots de variables numéricas", fontsize=16)
         plt.tight_layout()
-        plt.show()
+        self._finalize_plot(fig, save_path, show)
 
-    def plot_correlation_heatmap(self):
+    def plot_correlation_heatmap(self, save_path: Path | None = None, show: bool = False):
         """
         Display a correlation heatmap showing relationships between numeric variables.
         """
         print(f"\nPlotting correlation heatmap...", "\n")
-        plt.figure(figsize=(12, 8))
+        fig, ax = plt.subplots(figsize=(12, 8))
         corr = self.df.corr()
-        plt.title("Mapa de correlación", fontsize=16)
-        sns.heatmap(corr, annot=True, fmt=".2f", cmap="coolwarm", cbar=True)
-        plt.show()
+        ax.set_title("Mapa de correlación", fontsize=16)
+        sns.heatmap(corr, annot=True, fmt=".2f", cmap="coolwarm", cbar=True, ax=ax)
+        plt.tight_layout()
+        self._finalize_plot(fig, save_path, show)

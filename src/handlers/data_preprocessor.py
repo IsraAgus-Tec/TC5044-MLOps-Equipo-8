@@ -29,6 +29,8 @@ class DataPreprocessor:
         """
         print(f"\nConverting numeric values...", "\n")
         for col in self.NUMERIC_COLS:
+            if col not in self.df.columns:
+                continue
             self.df[col] = pd.to_numeric(self.df[col], errors="coerce").astype(float)
 
     def impute_missing(self):
@@ -43,6 +45,8 @@ class DataPreprocessor:
         print(f"\nMissing values before imputation: {missing_before}", "\n")
 
         for col in self.NUMERIC_COLS:
+            if col not in self.df.columns:
+                continue
             self.df[col] = self.df[col].fillna(self.df[col].median())
         missing_after = self.df.isna().sum().sum()
 
@@ -58,6 +62,8 @@ class DataPreprocessor:
         print(f"\nInitializing outlier analysis...", "\n")
         outlier_rows = set()
         for col in self.NUMERIC_COLS:
+            if col not in self.df.columns:
+                continue
             column_data = self.df[col]
             valid_data = column_data.dropna().values
             if valid_data.size == 0:

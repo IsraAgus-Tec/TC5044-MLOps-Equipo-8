@@ -2,9 +2,9 @@
 from pathlib import Path
 import subprocess
 
-# Rutas usadas en tu pipeline (según README_Fase2 y runner.py)
+# Rutas usadas por el pipeline principal
 DATA_PATH = Path("data/energy_efficiency_final.csv")
-RESULTS_DIR = Path("src/notebooks")
+RESULTS_DIR = Path("notebooks")
 CSV_METRICS = RESULTS_DIR / "results_metrics.csv"
 HTML_METRICS = RESULTS_DIR / "results_metrics.html"
 
@@ -12,7 +12,7 @@ HTML_METRICS = RESULTS_DIR / "results_metrics.html"
 def test_end_to_end_pipeline_creates_metrics_files():
     """
     Prueba de integración:
-    - Ejecuta el pipeline completo mediante `python -m energy_efficiency.runner`.
+    - Ejecuta el pipeline completo mediante `python -m src.main`.
     - Verifica que se generen los archivos de métricas esperados.
     """
 
@@ -30,11 +30,11 @@ def test_end_to_end_pipeline_creates_metrics_files():
         [
             "python",
             "-m",
-            "energy_efficiency.runner",
-            "--target",
-            "both",
-            "--data",
+            "src.main",
+            "--dataset",
             str(DATA_PATH),
+            "--output",
+            str(RESULTS_DIR),
         ],
         capture_output=True,
         text=True,

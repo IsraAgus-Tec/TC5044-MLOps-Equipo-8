@@ -22,17 +22,19 @@ class DataLoader:
         return Path(__file__).resolve().parent
 
     def get_repo_root(self) -> Path:
-        # handlers/ -> src/ -> repo root
+        """
+        Ubica la raíz del repositorio siguiendo la convención de layout `src/`.
+        """
         return self.getBaseDir().parents[1]
 
     def getDataFrameFromFile(self, route_to_file: str):
-        file_path = self.getBaseDir().parent / route_to_file
+        file_path = self.get_repo_root() / route_to_file
         df = pd.read_csv(file_path)
         print(f"\nSuccesfully loaded DF from {file_path}...", "\n")
         return df.rename(columns=self.NAMING_MAP, inplace=False)
 
     def saveDataFrameAsFileWithDVC(self, df: pd.DataFrame, route: str, file_name: str):
-        folder_path = self.getBaseDir().parent / route
+        folder_path = self.get_repo_root() / route
         folder_path.mkdir(parents=True, exist_ok=True)
         file_path = folder_path / file_name
 
