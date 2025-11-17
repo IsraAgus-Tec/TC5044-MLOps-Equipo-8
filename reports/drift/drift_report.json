@@ -1,0 +1,25 @@
+{
+  "dataset": "data/energy_efficiency_final.csv",
+  "model_path": "models/energy_efficiency_rf.joblib",
+  "baseline_metrics": {
+    "r2": 0.8220472603909103,
+    "rmse": 0.0497582287411244,
+    "mae": 0.006012210767290624
+  },
+  "drift_metrics": {
+    "r2": 0.7939290658536244,
+    "rmse": 0.05306175515500853,
+    "mae": 0.01405747849405601
+  },
+  "delta": {
+    "r2": -0.028118194537285812,
+    "rmse": 0.0033035264138841294,
+    "mae": 0.008045267726765386
+  },
+  "alert": false,
+  "recommended_action": "Continuar monitoreando",
+  "thresholds": {
+    "drop_r2": 0.05,
+    "increase_rmse": 0.01
+  }
+}

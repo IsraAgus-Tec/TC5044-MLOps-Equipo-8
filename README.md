@@ -99,4 +99,15 @@ Creamos una imagen ligera que empaqueta FastAPI, dependencias y el modelo export
 
 Una vez corriendo, los endpoints (`/docs`, `/predict`, `/healthz`) funcionan igual que en local.
 
+### Monitoreo y Data Drift
+
+- Ejecuta `python -m src.monitoring.drift_detection` para crear un dataset de monitoreo alterado, evaluar el modelo exportado y comparar contra la línea base.
+- Artefactos:
+  - Reporte JSON con métricas, deltas y umbrales: `reports/drift/drift_report.json`.
+  - Muestra de datos con drift para análisis manual: `reports/drift/drift_sample.csv`.
+- Último resultado:
+  - `baseline_r2 = 0.8220`, `drift_r2 = 0.7939` (Δ = -0.0281) → por debajo del umbral (0.05), **sin alerta**.
+  - `baseline_rmse = 0.0498`, `drift_rmse = 0.0531` (Δ = +0.0033) → incremento controlado (< 0.01 requerido).
+  - Acción recomendada por el script: “Continuar monitoreando”. Si se superan los umbrales establecidos (`ΔR² >= 0.05` o `ΔRMSE >= 0.01`), el reporte devolverá `alert: true` y sugerirá revisar el feature pipeline / reentrenar.
+
 Consulta `src/README.md` y `data/README.md` para más detalles de cada módulo.
