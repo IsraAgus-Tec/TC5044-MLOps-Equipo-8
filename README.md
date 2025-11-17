@@ -1,6 +1,21 @@
 # TC5044 – Energy Efficiency (Cookiecutter Layout)
 
-Este repositorio ahora sigue la convención de [Cookiecutter Data Science](https://drivendata.github.io/cookiecutter-data-science/):
+<p align="left">
+  <a target="_blank" href="https://cookiecutter-data-science.drivendata.org/">
+    <img src="https://img.shields.io/badge/CCDS-Project%20template-328F97?logo=cookiecutter" alt="Cookiecutter Data Science">
+  </a>
+  <a target="_blank" href="https://www.python.org/">
+    <img src="https://img.shields.io/badge/Python-3.11-blue?logo=python&logoColor=white" alt="Python">
+  </a>
+  <a target="_blank" href="https://fastapi.tiangolo.com/">
+    <img src="https://img.shields.io/badge/FastAPI-async-green?logo=fastapi" alt="FastAPI">
+  </a>
+  <a target="_blank" href="https://www.docker.com/">
+    <img src="https://img.shields.io/badge/Docker-Container-2496ED?logo=docker&logoColor=white" alt="Docker">
+  </a>
+</p>
+
+Este repositorio sigue la convención de [Cookiecutter Data Science](https://drivendata.github.io/cookiecutter-data-science/):
 
 ```
 ├── data
