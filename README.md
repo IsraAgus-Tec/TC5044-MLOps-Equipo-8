@@ -94,7 +94,7 @@ Creamos una imagen ligera que empaqueta FastAPI, dependencias y el modelo export
    docker push team8/ml-service:latest
    ```
    Versiones sugeridas:
-   - `team8/ml-service:1.0.0` → imagen asociada al experimento actual (modelo `models:/energy_efficiency_rf/latest`).
+   - `team8/ml-service:1.0.1` → imagen asociada al experimento actual (modelo `models:/energy_efficiency_rf/latest`).
    - `team8/ml-service:latest` → alias apuntando a la versión estable más reciente.
 
 Una vez corriendo, los endpoints (`/docs`, `/predict`, `/healthz`) funcionan igual que en local.
