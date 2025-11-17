@@ -74,4 +74,29 @@ Consulta `docs/REPRODUCIBILITY.md` para el checklist completo de ejecución en u
 
 Revisa `src/api/app.py` para más detalles del esquema y validaciones.
 
+### Contenedor Docker
+
+Creamos una imagen ligera que empaqueta FastAPI, dependencias y el modelo exportado.
+
+1. Construcción:
+   ```bash
+   docker build -t ml-service:latest .
+   ```
+2. Ejecución local:
+   ```bash
+   docker run -p 8000:8000 ml-service:latest
+   ```
+3. Publicación en Docker Hub (ejemplo con cuenta `team8`):
+   ```bash
+   docker tag ml-service:latest team8/ml-service:1.0.0
+   docker push team8/ml-service:1.0.0
+   docker tag ml-service:latest team8/ml-service:latest
+   docker push team8/ml-service:latest
+   ```
+   Versiones sugeridas:
+   - `team8/ml-service:1.0.0` → imagen asociada al experimento actual (modelo `models:/energy_efficiency_rf/latest`).
+   - `team8/ml-service:latest` → alias apuntando a la versión estable más reciente.
+
+Una vez corriendo, los endpoints (`/docs`, `/predict`, `/healthz`) funcionan igual que en local.
+
 Consulta `src/README.md` y `data/README.md` para más detalles de cada módulo.
